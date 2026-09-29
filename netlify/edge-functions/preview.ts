@@ -1,4 +1,9 @@
-import { isAmazonHost, isShortLinkHost, parseLink } from '../../src/lib/amazon-url.ts';
+import {
+  isAmazonHost,
+  isShortLinkHost,
+  parseLink,
+  type ParsedLink,
+} from '../../src/lib/amazon-url.ts';
 import { parseAmazonHtml, type ParsedProduct } from '../lib/amazon-parser.ts';
 import { parseOpenGraphHtml } from '../lib/og-parser.ts';
 import { fetchPage, isPublicUrl, type FetchedPage } from '../lib/fetch-page.ts';
@@ -80,6 +85,7 @@ type LoadOutcome =
   | { kind: 'unsupported' | 'unreachable' | 'not-found' | 'blocked' | 'unparsable' };
 
 function statusOutcome(page: FetchedPage): LoadOutcome | null {
+  if (page.kind === 'resolved') return { kind: 'unreachable' };
   if (page.kind !== 'page') return { kind: page.kind };
   if (page.status === 404 || page.status === 410) return { kind: 'not-found' };
   if (page.status === 503) return { kind: 'blocked' };
@@ -87,16 +93,39 @@ function statusOutcome(page: FetchedPage): LoadOutcome | null {
   return null;
 }
 
+/**
+ * Turns a short link ("amzn.eu/d/…") into the Amazon link it points to,
+ * without reading any page: the shorteners answer with a redirect, sometimes
+ * written inside a page. The page is then read the way a pasted product
+ * link is (canonical URL, marketplace language), not through the tracking
+ * URL the apps share, which Amazon treats differently.
+ */
+export async function resolveShortLink(
+  url: string,
+): Promise<{ kind: 'link'; link: ParsedLink } | { kind: 'unsupported' | 'unreachable' }> {
+  let page: FetchedPage;
+  try {
+    page = await fetchPage(url, {
+      allow: (target) => isAmazonHost(target.hostname) || isShortLinkHost(target.hostname),
+      acceptLanguage: 'en-US,en;q=0.9',
+      followClientRedirects: (target) => isShortLinkHost(target.hostname),
+      stopAt: (target) => isAmazonHost(target.hostname),
+    });
+  } catch {
+    return { kind: 'unreachable' };
+  }
+  if (page.kind === 'resolved') return { kind: 'link', link: parseLink(page.url) };
+  if (page.kind === 'page') return { kind: page.status === 404 ? 'unsupported' : 'unreachable' };
+  return { kind: page.kind };
+}
+
 /** One attempt at an Amazon page: follow Amazon-only redirects, then parse. */
 async function loadAmazon(startUrl: string, marketplace: string | null): Promise<LoadOutcome> {
   let page: FetchedPage;
   try {
     page = await fetchPage(startUrl, {
-      allow: (url) => isAmazonHost(url.hostname) || isShortLinkHost(url.hostname),
+      allow: (url) => isAmazonHost(url.hostname),
       acceptLanguage: ACCEPT_LANGUAGE[marketplace ?? ''] ?? 'en-US,en;q=0.9',
-      // The Amazon shorteners sometimes redirect from inside a page; product
-      // pages never do, and their scripts must not be mistaken for one.
-      followClientRedirects: (url) => isShortLinkHost(url.hostname),
     });
   } catch {
     return { kind: 'unreachable' };
@@ -136,8 +165,17 @@ async function loadStore(startUrl: string, acceptLanguage: string): Promise<Load
 export default async function handler(request: Request): Promise<Response> {
   if (request.method !== 'GET') return json({ ok: false, reason: 'invalid-url' }, 405);
   const target = new URL(request.url).searchParams.get('url') ?? '';
-  const link = parseLink(target);
+  let link = parseLink(target);
   if (link.kind === 'invalid') return json({ ok: false, reason: 'invalid-url' }, 400);
+  if (link.kind === 'short') {
+    const resolved = await resolveShortLink(link.url);
+    if (resolved.kind !== 'link')
+      return json({ ok: false, reason: resolved.kind }, STATUS[resolved.kind]);
+    link = resolved.link;
+    if (link.kind === 'invalid' || link.kind === 'short' || link.kind === 'other') {
+      return json({ ok: false, reason: 'unsupported' }, STATUS.unsupported);
+    }
+  }
   if (link.kind === 'wishlist') {
     return json({ ok: false, reason: 'wishlist', url: link.canonicalUrl }, STATUS.wishlist);
   }

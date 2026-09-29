@@ -92,6 +92,8 @@ export function findClientRedirect(html: string): string | null {
 
 export type FetchedPage =
   | { kind: 'page'; url: string; status: number; contentType: string; html: string }
+  /** A redirect target that `stopAt` accepted: not fetched. */
+  | { kind: 'resolved'; url: string }
   | { kind: 'unsupported' | 'unreachable' };
 
 export interface FetchOptions {
@@ -100,6 +102,8 @@ export interface FetchOptions {
   acceptLanguage: string;
   /** Follow redirects written inside a 200 page too; only from hosts that pass this test. */
   followClientRedirects?: (url: URL) => boolean;
+  /** Stop before fetching a redirect target that passes this test and return it as `resolved`. */
+  stopAt?: (url: URL) => boolean;
 }
 
 /** Fetches a page following at most MAX_REDIRECTS redirects, each one checked with `allow`. */
@@ -112,6 +116,7 @@ export async function fetchPage(startUrl: string, options: FetchOptions): Promis
   }
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
     if (!isPublicUrl(current) || !options.allow(current)) return { kind: 'unsupported' };
+    if (hop > 0 && options.stopAt?.(current)) return { kind: 'resolved', url: current.toString() };
     const response = await fetch(current, {
       headers: browserHeaders(options.acceptLanguage),
       redirect: 'manual',

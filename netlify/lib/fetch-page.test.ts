@@ -108,6 +108,21 @@ describe('fetchPage', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it('stops before a redirect target the caller wants to handle itself', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(html('', 301, { location: 'https://short.example/b' }))
+      .mockResolvedValueOnce(html('', 301, { location: 'https://shop.example/p?ref=x' }));
+    vi.stubGlobal('fetch', fetchMock);
+    const page = await fetchPage('https://short.example/a', {
+      allow: () => true,
+      acceptLanguage: 'it',
+      stopAt: (url) => url.hostname === 'shop.example',
+    });
+    expect(page).toEqual({ kind: 'resolved', url: 'https://shop.example/p?ref=x' });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it('gives up after too many redirects', async () => {
     vi.stubGlobal(
       'fetch',

@@ -66,6 +66,7 @@ describe('preview function', () => {
     const { status, body } = await call('https://amzn.eu/d/abc123');
     expect(status).toBe(200);
     expect(body.product.asin).toBe('B0H82G3QD4');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
 
     const evil = vi
       .fn()
@@ -75,35 +76,88 @@ describe('preview function', () => {
     expect(evil).toHaveBeenCalledTimes(1);
   });
 
-  it('resolves the share links of the iPhone app through several hops and page redirects', async () => {
+  it('reads the share links of the Amazon apps through the canonical product page', async () => {
+    // What amzn.eu answers for a link shared from the app: a redirect to the
+    // product page with social-share tracking parameters. The page is then
+    // read at its canonical URL, in the marketplace language, like a pasted link.
     const fetchMock = vi
       .fn()
-      // The shortener answers with a page that redirects from inside.
       .mockResolvedValueOnce(
-        htmlResponse(
-          '<html><head><meta http-equiv="refresh" content="0;url=https://www.amazon.it/dp/B0H82G3QD4/ref=cm_sw_r_apin_dp_ABC?_encoding=UTF8&amp;psc=1"></head></html>',
-        ),
-      )
-      .mockResolvedValueOnce(
-        htmlResponse('', 302, {
-          location: '/Cuffie-Bluetooth/dp/B0H82G3QD4?ref_=cm_sw_r_apin_dp_ABC&th=1',
+        htmlResponse('', 301, {
+          location:
+            'https://www.amazon.it/dp/B0GKMBVVPQ?ref=cm_sw_r_cso_cp_apin_dp_HWD6X8VDZX6EA30WMQGX&ref_=cm_sw_r_cso_cp_apin_dp_HWD6X8VDZX6EA30WMQGX&social_share=cm_sw_r_cso_cp_apin_dp_HWD6X8VDZX6EA30WMQGX',
         }),
-      )
-      .mockResolvedValueOnce(
-        htmlResponse('', 301, { location: 'https://www.amazon.it/dp/B0H82G3QD4?th=1' }),
       )
       .mockResolvedValueOnce(htmlResponse(PRODUCT_PAGE));
     vi.stubGlobal('fetch', fetchMock);
     const { status, body } = await call(
-      'Guarda cosa ho trovato su Amazon https://amzn.eu/d/0hXk9Zq',
+      'Guarda cosa ho trovato su Amazon https://amzn.eu/d/0gVHHvNf',
     );
     expect(status).toBe(200);
     expect(body.product).toMatchObject({
-      asin: 'B0H82G3QD4',
+      asin: 'B0GKMBVVPQ',
       marketplace: 'it',
-      url: 'https://www.amazon.it/dp/B0H82G3QD4',
+      url: 'https://www.amazon.it/dp/B0GKMBVVPQ',
     });
-    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const [productUrl, init] = fetchMock.mock.calls[1] as unknown as [URL, RequestInit];
+    expect(productUrl.toString()).toBe('https://www.amazon.it/dp/B0GKMBVVPQ');
+    expect((init.headers as Record<string, string>)['accept-language']).toContain('it-IT');
+  });
+
+  it('resolves a shortener that redirects from inside its page, through several hops', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        htmlResponse(
+          '<html><head><meta http-equiv="refresh" content="0;url=https://amzn.to/second"></head></html>',
+        ),
+      )
+      .mockResolvedValueOnce(
+        htmlResponse('', 302, {
+          location:
+            'https://www.amazon.it/Cuffie-Bluetooth/dp/B0H82G3QD4/ref=cm_sw_r_apin_dp_ABC?th=1',
+        }),
+      )
+      .mockResolvedValueOnce(htmlResponse(PRODUCT_PAGE));
+    vi.stubGlobal('fetch', fetchMock);
+    const { status, body } = await call('https://amzn.eu/d/0hXk9Zq');
+    expect(status).toBe(200);
+    expect(body.product).toMatchObject({ asin: 'B0H82G3QD4', marketplace: 'it' });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('retries only the product page when a short link meets a captcha', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        htmlResponse('', 301, { location: 'https://www.amazon.it/dp/B0H82G3QD4?ref=x' }),
+      )
+      .mockResolvedValueOnce(htmlResponse('<title>Robot Check</title>'))
+      .mockResolvedValueOnce(htmlResponse(PRODUCT_PAGE));
+    vi.stubGlobal('fetch', fetchMock);
+    const { body } = await call('https://amzn.eu/d/abc123');
+    expect(body.product.asin).toBe('B0H82G3QD4');
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    const urls = fetchMock.mock.calls.map((c) => String((c as unknown as [URL])[0]));
+    expect(urls.slice(1)).toEqual([
+      'https://www.amazon.it/dp/B0H82G3QD4',
+      'https://www.amazon.it/dp/B0H82G3QD4',
+    ]);
+  });
+
+  it('answers unsupported when a short link does not exist', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response('{}', { status: 404, headers: { 'content-type': 'application/json' } }),
+      ),
+    );
+    expect(await call('https://amzn.eu/d/nope')).toMatchObject({
+      status: 400,
+      body: { ok: false, reason: 'unsupported' },
+    });
   });
 
   it('recognises a short link that leads to a wish list', async () => {

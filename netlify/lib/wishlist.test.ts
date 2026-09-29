@@ -48,27 +48,25 @@ describe('wishlist function', () => {
     expect(body.list.items).toHaveLength(3);
     expect(body.list.items[0]).toMatchObject({ asin: 'B0H82G3QD4', price: { amount: 129.9 } });
     const [requestedUrl] = fetchMock.mock.calls[0] as unknown as [URL];
-    expect(requestedUrl.toString()).toBe(
-      'https://www.amazon.it/hz/wishlist/ls/2ABCDEF12345?ref_=wl_share',
-    );
+    expect(requestedUrl.toString()).toBe('https://www.amazon.it/hz/wishlist/ls/2ABCDEF12345');
   });
 
   it('resolves a shared short link, but only if it leads to a list', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi
-        .fn()
-        .mockResolvedValueOnce(
-          htmlResponse('', 301, { location: 'https://www.amazon.de/hz/wishlist/ls/XYZ789?ref=x' }),
-        )
-        .mockResolvedValueOnce(htmlResponse(WISHLIST_PAGE)),
-    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        htmlResponse('', 301, { location: 'https://www.amazon.de/hz/wishlist/ls/XYZ789?ref=x' }),
+      )
+      .mockResolvedValueOnce(htmlResponse(WISHLIST_PAGE));
+    vi.stubGlobal('fetch', fetchMock);
     const { body } = await call('https://amzn.eu/d/list1');
     expect(body.list).toMatchObject({
       url: 'https://www.amazon.de/hz/wishlist/ls/XYZ789',
       marketplace: 'de',
     });
     expect(body.list.items[0].url).toBe('https://www.amazon.de/dp/B0H82G3QD4');
+    const listUrl = String((fetchMock.mock.calls[1] as unknown as [URL])[0]);
+    expect(listUrl).toBe('https://www.amazon.de/hz/wishlist/ls/XYZ789');
 
     vi.stubGlobal(
       'fetch',

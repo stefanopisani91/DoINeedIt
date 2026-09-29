@@ -1,6 +1,7 @@
-import { isAmazonHost, isShortLinkHost, parseLink } from '../../src/lib/amazon-url.ts';
+import { isAmazonHost, parseLink } from '../../src/lib/amazon-url.ts';
 import { parseWishlistHtml, type WishlistItem } from '../lib/wishlist-parser.ts';
 import { fetchPage, type FetchedPage } from '../lib/fetch-page.ts';
+import { resolveShortLink } from './preview.ts';
 
 /**
  * GET /api/wishlist?url=<public Amazon wish list link>
@@ -62,17 +63,17 @@ type LoadOutcome =
   | { kind: 'list'; url: string; marketplace: string; title: string | null; items: WishlistItem[] }
   | { kind: Exclude<WishlistFailure, 'invalid-url'> };
 
-async function loadList(startUrl: string, marketplace: string | null): Promise<LoadOutcome> {
+async function loadList(startUrl: string, marketplace: string): Promise<LoadOutcome> {
   let page: FetchedPage;
   try {
     page = await fetchPage(startUrl, {
-      allow: (url) => isAmazonHost(url.hostname) || isShortLinkHost(url.hostname),
-      acceptLanguage: ACCEPT_LANGUAGE[marketplace ?? ''] ?? 'en-US,en;q=0.9',
-      followClientRedirects: (url) => isShortLinkHost(url.hostname),
+      allow: (url) => isAmazonHost(url.hostname),
+      acceptLanguage: ACCEPT_LANGUAGE[marketplace] ?? 'en-US,en;q=0.9',
     });
   } catch {
     return { kind: 'unreachable' };
   }
+  if (page.kind === 'resolved') return { kind: 'unreachable' };
   if (page.kind !== 'page') return { kind: page.kind };
   if (page.status === 404 || page.status === 410) return { kind: 'not-found' };
   if (page.status === 503) return { kind: 'blocked' };
@@ -94,16 +95,19 @@ async function loadList(startUrl: string, marketplace: string | null): Promise<L
 export default async function handler(request: Request): Promise<Response> {
   if (request.method !== 'GET') return json({ ok: false, reason: 'invalid-url' }, 405);
   const target = new URL(request.url).searchParams.get('url') ?? '';
-  const link = parseLink(target);
+  let link = parseLink(target);
   if (link.kind === 'invalid') return json({ ok: false, reason: 'invalid-url' }, 400);
-  if (link.kind !== 'wishlist' && link.kind !== 'short') {
-    return json({ ok: false, reason: 'unsupported' }, 400);
+  if (link.kind === 'short') {
+    const resolved = await resolveShortLink(link.url);
+    if (resolved.kind !== 'link')
+      return json({ ok: false, reason: resolved.kind }, STATUS[resolved.kind]);
+    link = resolved.link;
   }
+  if (link.kind !== 'wishlist') return json({ ok: false, reason: 'unsupported' }, 400);
 
-  const marketplace = link.kind === 'wishlist' ? link.marketplace : null;
   let outcome: LoadOutcome = { kind: 'blocked' };
   for (let attempt = 0; attempt < CAPTCHA_ATTEMPTS && outcome.kind === 'blocked'; attempt++) {
-    outcome = await loadList(link.url, marketplace);
+    outcome = await loadList(link.canonicalUrl, link.marketplace);
   }
   if (outcome.kind !== 'list')
     return json({ ok: false, reason: outcome.kind }, STATUS[outcome.kind]);

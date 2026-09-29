@@ -98,7 +98,7 @@ Comandi, architettura e convenzioni sono in [CONTRIBUTING.md](CONTRIBUTING.md).
 - Le funzioni edge controllano il nome dell'host, non l'indirizzo IP risolto: non contattano mai indirizzi letterali, locali o porte non standard, ma un DNS pubblico che punta a un indirizzo privato non è rilevabile dall'edge.
 - Se un testo condiviso contiene più link, conta il primo.
 - I dati sono legati al browser: cambiando dispositivo bisogna esportare e importare il file. La coda "da valutare", il budget e la lingua non entrano nel file.
-- DoINeedIt compare nel menu Condividi solo su Android e solo dopo averla installata. Su iPhone e iPad l'app si installa e funziona offline, ma il menu Condividi non è disponibile per le app web: il link va incollato a mano (i link brevi `amzn.eu/d/…` dell'app Amazon sono riconosciuti).
+- DoINeedIt compare nel menu Condividi solo su Android e solo dopo averla installata. Su iPhone e iPad l'app si installa e funziona offline, ma il menu Condividi non è disponibile per le app web: il link va incollato a mano (i link brevi `amzn.eu/d/…` dell'app Amazon sono riconosciuti e risolti alla pagina prodotto).
 - L'avviso di nuova versione arriva quando l'app viene aperta o torna in primo piano, non mentre è già aperta sullo schermo.
 - Il manifest è un file statico per lingua: l'app installata prende nome e descrizione dalla lingua in uso al momento dell'installazione.
 
