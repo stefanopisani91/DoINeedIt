@@ -2,7 +2,7 @@
 
 Un'app web che mi aiuta a non comprare cose inutili. Incollo il link di un prodotto Amazon, rispondo a poche domande sincere (sì, no, forse) e ottengo un punteggio da 0 a 100 che dice quanto mi serve davvero quell'acquisto. Ogni prodotto valutato resta salvato con foto, prezzo e verdetto, così a fine mese vedo quanti impulsi ho fermato.
 
-**Demo:** https://do-i-need-it.netlify.app
+**Demo:** https://do-i-need-it-now.netlify.app
 
 Ho costruito DoINeedIt come progetto dimostrativo: volevo un caso reale, piccolo ma completo, per mostrare come ragiono su un problema di sprechi e come lo trasformo in un prodotto funzionante, testato e pubblicato.
 

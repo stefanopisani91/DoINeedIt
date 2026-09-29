@@ -37,7 +37,7 @@ npm run icons        # rigenera le icone PNG da public/favicon.svg (usa il Chrom
 
 ## Pubblicazione
 
-Il repository non è collegato a Netlify di proposito, per non consumare minuti di build a ogni push: la pubblicazione è manuale, a fine sessione, sul progetto `do-i-need-it` (id `8fd72bae-3927-4b60-8103-9c01aa56a0eb`, team `barcetrip`). Dopo la pubblicazione: controllare la home, una pagina interna (fallback SPA) e `/api/preview?url=` con un link amazon.it reale.
+Il repository non è collegato a Netlify di proposito, per non consumare minuti di build a ogni push: la pubblicazione è manuale, a fine sessione, sul progetto `do-i-need-it-now` (id `2c0890d9-adff-4eb7-b66f-256075cebcdd`, https://do-i-need-it-now.netlify.app), con accesso pubblico senza login del team. Il vecchio progetto `do-i-need-it` (https://do-i-need-it.netlify.app, su un altro account) è fermo a una versione precedente alla 1.1.0 e non riceve più pubblicazioni. Dopo la pubblicazione: controllare la home, una pagina interna (fallback SPA) e `/api/preview?url=` con un link amazon.it reale.
 
 ## Roadmap
 
