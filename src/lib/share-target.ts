@@ -26,5 +26,22 @@ export function resolveShareTarget(params: URLSearchParams): ShareTargetIntent {
     const link = extractUrl(candidate);
     if (link) return { kind: 'redirect', url: link };
   }
-  return { kind: 'manual', title: (text.trim() || title.trim()).slice(0, 300) };
+  return { kind: 'manual', title: toTitle(text) || toTitle(title) };
+}
+
+/** Longest title the form accepts: its input's `maxLength`, in UTF-16 code units. */
+export const MAX_TITLE_LENGTH = 300;
+
+/**
+ * Shared text can span several lines, which a single-line title cannot show:
+ * whitespace collapses to single spaces. The cut never splits a character, so
+ * an emoji that does not fit is dropped whole instead of cut in half.
+ */
+function toTitle(value: string): string {
+  let title = '';
+  for (const char of value.replace(/\s+/g, ' ').trim()) {
+    if (title.length + char.length > MAX_TITLE_LENGTH) break;
+    title += char;
+  }
+  return title.trimEnd();
 }

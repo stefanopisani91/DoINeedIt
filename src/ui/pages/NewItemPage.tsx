@@ -6,7 +6,7 @@ import { it } from '@/i18n/it';
 import { fetchPreview, type PreviewOutcome } from '@/api/preview';
 import { parseLink } from '@/lib/amazon-url';
 import { parsePriceInput } from '@/lib/format';
-import { resolveShareTarget } from '@/lib/share-target';
+import { MAX_TITLE_LENGTH, resolveShareTarget } from '@/lib/share-target';
 import { useDraftStore } from '@/storage/draft';
 import type { Draft } from '@/storage/types';
 import { Button, ButtonLink } from '../components/Button';
@@ -164,7 +164,7 @@ function NewItemForm({ url, initialTitle }: { url: string; initialTitle: string 
               id="title"
               type="text"
               aria-required="true"
-              maxLength={300}
+              maxLength={MAX_TITLE_LENGTH}
               value={form.title}
               onChange={(event) => {
                 setForm({ ...form, title: event.target.value });

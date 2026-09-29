@@ -51,4 +51,22 @@ describe('resolveShareTarget', () => {
       (resolveShareTarget(params({ text: 'x'.repeat(400) })) as { title: string }).title,
     ).toHaveLength(300);
   });
+
+  it('turns a multi-line shared text into a single-line title', () => {
+    expect(
+      resolveShareTarget(
+        params({ text: 'Cuffie bluetooth\n\n  con   cancellazione\tdel rumore\n' }),
+      ),
+    ).toEqual({ kind: 'manual', title: 'Cuffie bluetooth con cancellazione del rumore' });
+  });
+
+  it('cuts a long title without splitting an emoji in half', () => {
+    // The emoji takes two UTF-16 code units: at 299 + 2 it no longer fits.
+    const intent = resolveShareTarget(params({ text: `${'x'.repeat(299)}🎧 cuffie` }));
+    expect(intent).toEqual({ kind: 'manual', title: 'x'.repeat(299) });
+    expect(resolveShareTarget(params({ text: `${'x'.repeat(298)}🎧 cuffie` }))).toEqual({
+      kind: 'manual',
+      title: `${'x'.repeat(298)}🎧`,
+    });
+  });
 });
