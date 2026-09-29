@@ -10,7 +10,7 @@ export const it = {
   app: {
     name: 'DoINeedIt',
     tagline: 'Ti serve davvero?',
-    nav: { home: 'I miei oggetti', settings: 'Impostazioni' },
+    nav: { label: 'Navigazione principale', home: 'I miei oggetti', settings: 'Impostazioni' },
     footer: 'I tuoi dati restano nel tuo browser. Nessun account, nessun tracciamento.',
     privacyLink: 'Privacy',
   },

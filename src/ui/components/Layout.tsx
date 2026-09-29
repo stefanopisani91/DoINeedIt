@@ -19,7 +19,7 @@ export function Layout({ children }: { children: ReactNode }) {
             <Logo />
             <span className="text-lg font-bold tracking-tight">{it.app.name}</span>
           </Link>
-          <nav className="flex items-center gap-1" aria-label="Navigazione">
+          <nav className="flex items-center gap-1" aria-label={it.app.nav.label}>
             <NavLink to="/" end className={navClass}>
               {it.app.nav.home}
             </NavLink>
