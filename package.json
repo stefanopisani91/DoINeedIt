@@ -1,7 +1,7 @@
 {
   "name": "doineedit",
   "private": true,
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Chiediti se ti serve davvero prima di comprare: valuta un acquisto Amazon con poche domande e un punteggio di necessità.",
   "type": "module",
   "scripts": {
