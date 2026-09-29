@@ -73,6 +73,15 @@ export const QUESTIONS: Question[] = [
     weight: 2,
     polarity: 'skip',
   },
+  {
+    id: 'budget_sacrifice',
+    text: 'Per pagarlo dovresti intaccare i risparmi, pagare a rate o rinunciare a qualcosa che avevi già programmato?',
+    hint: 'Se lo paghi con i soldi del mese senza pensarci, rispondi no.',
+    dimension: 'budget',
+    stage: 1,
+    weight: 3,
+    polarity: 'skip',
+  },
 
   // ───────────── Stage 2: category-specific deepening ─────────────
   {
@@ -290,6 +299,23 @@ export const QUESTIONS: Question[] = [
     stage: 2,
     weight: 3,
     polarity: 'need',
+  },
+  {
+    id: 'budget_month_spent',
+    text: 'Questo mese hai già fatto altri acquisti non indispensabili?',
+    hint: 'Conta tutto quello che non era una necessità.',
+    dimension: 'budget',
+    stage: 2,
+    weight: 2,
+    polarity: 'skip',
+  },
+  {
+    id: 'budget_regret',
+    text: 'Se tra un mese rivedessi questa spesa sull’estratto conto, ti darebbe fastidio?',
+    dimension: 'budget',
+    stage: 2,
+    weight: 2,
+    polarity: 'skip',
   },
   {
     id: 'wanted_before',

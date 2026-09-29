@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { useItemsStore, STORAGE_KEY } from './store';
+import { migrateItems, useItemsStore, STORAGE_KEY } from './store';
+import { SETTINGS_KEY, useSettingsStore } from './settings';
 import { buildExport, parseImport } from './export';
 import { EXAMPLE_ITEMS } from '@/data/examples';
+import type { Item } from './types';
 
 describe('items store', () => {
   beforeEach(() => {
@@ -56,5 +58,44 @@ describe('export / import', () => {
     expect(parseImport('{')).toEqual({ ok: false, reason: 'invalid-json' });
     expect(parseImport('{"hello":1}')).toEqual({ ok: false, reason: 'invalid-format' });
     expect(parseImport('{"items":[{"id":"x"}]}')).toEqual({ ok: false, reason: 'invalid-format' });
+  });
+});
+
+/** An item as version 1 stored it: no monthly budget and no budget component in the result. */
+function asVersion1(item: Item): Record<string, unknown> {
+  const { result, ...rest } = item;
+  const legacyResult: Record<string, unknown> = { ...result };
+  delete legacyResult['budget'];
+  const legacy: Record<string, unknown> = { ...rest, result: legacyResult };
+  delete legacy['budget'];
+  return legacy;
+}
+
+describe('migration', () => {
+  it('adds the budget component to results stored before version 2', () => {
+    const migrated = migrateItems({ items: [asVersion1(EXAMPLE_ITEMS[0]!)] }, 1);
+    expect(migrated.items[0]?.result.budget).toBeNull();
+    expect(migrated.items[0]?.budget).toBeUndefined();
+    expect(migrateItems(undefined, 1)).toEqual({ items: [] });
+  });
+
+  it('accepts export files written before the budget criterion', () => {
+    const file = buildExport(EXAMPLE_ITEMS);
+    const old = { ...file, version: 1, items: EXAMPLE_ITEMS.map(asVersion1) };
+    const outcome = parseImport(JSON.stringify(old));
+    expect(outcome.ok).toBe(true);
+    if (outcome.ok) {
+      expect(outcome.items[0]?.result.budget).toBeNull();
+      expect(outcome.items[0]?.budget).toBeUndefined();
+    }
+  });
+});
+
+describe('settings store', () => {
+  it('persists the monthly budget', () => {
+    useSettingsStore.getState().setBudget({ amount: 300, currency: 'EUR' });
+    expect(window.localStorage.getItem(SETTINGS_KEY)).toContain('300');
+    useSettingsStore.getState().setBudget(null);
+    expect(useSettingsStore.getState().budget).toBeNull();
   });
 });

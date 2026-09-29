@@ -1,6 +1,13 @@
 import type { Answers, CategoryId, FlowState, Question, Result, Stage } from './types';
-import { CLEAR_ENOUGH, EARLY_STOP, MIN_STAGE_ANSWERS, TIE_BREAK_BAND } from './config';
 import {
+  CLEAR_ENOUGH,
+  EARLY_STOP,
+  MIN_STAGE_ANSWERS,
+  NEGLIGIBLE_BUDGET_SHARE,
+  TIE_BREAK_BAND,
+} from './config';
+import {
+  budgetImpact,
   computeConfidence,
   computeDimensions,
   computeDrivers,
@@ -8,9 +15,22 @@ import {
   verdictFor,
 } from './scoring';
 
-/** Questions that apply to a category, category-specific ones first within each stage. */
-export function questionsFor(all: Question[], category: CategoryId): Question[] {
-  const applicable = all.filter((q) => !q.categories || q.categories.includes(category));
+/**
+ * Questions that apply to a category, category-specific ones first within each
+ * stage. When the price is a negligible share of the monthly budget, the budget
+ * questions are left out: the price already answers them.
+ */
+export function questionsFor(
+  all: Question[],
+  category: CategoryId,
+  budgetShare?: number,
+): Question[] {
+  const negligible = budgetShare !== undefined && budgetShare < NEGLIGIBLE_BUDGET_SHARE;
+  const applicable = all.filter(
+    (q) =>
+      (!q.categories || q.categories.includes(category)) &&
+      !(negligible && q.dimension === 'budget'),
+  );
   const specific = applicable.filter((q) => q.categories);
   const generic = applicable.filter((q) => !q.categories);
   const byStage = (stage: Stage) => [
@@ -47,24 +67,24 @@ function isClear(score: number, band: { low: number; high: number }) {
  * Stage 3 (tie-break) runs only when the score is still around the middle.
  */
 export function nextQuestion(all: Question[], state: FlowState): Question | null {
-  const questions = questionsFor(all, state.category);
-  const { answers } = state;
+  const questions = questionsFor(all, state.category, state.budgetShare);
+  const { answers, budgetShare } = state;
 
   const core = pending(questions, answers, 1);
   if (core) return core;
 
-  const afterCore = computeScore(questions, answers);
+  const afterCore = computeScore(questions, answers, budgetShare);
   if (isClear(afterCore, EARLY_STOP)) return null;
 
   const deepening = pending(questions, answers, 2);
   if (deepening) {
     const done = answeredInStage(questions, answers, 2);
-    const clear = isClear(computeScore(questions, answers), CLEAR_ENOUGH);
+    const clear = isClear(computeScore(questions, answers, budgetShare), CLEAR_ENOUGH);
     if (done >= MIN_STAGE_ANSWERS && clear) return null;
     return deepening;
   }
 
-  const afterDeepening = computeScore(questions, answers);
+  const afterDeepening = computeScore(questions, answers, budgetShare);
   const uncertain = afterDeepening >= TIE_BREAK_BAND.low && afterDeepening <= TIE_BREAK_BAND.high;
   if (!uncertain) return null;
 
@@ -73,21 +93,31 @@ export function nextQuestion(all: Question[], state: FlowState): Question | null
 
 /** Number of questions the flow could still ask at most, used for progress hints. */
 export function remainingUpperBound(all: Question[], state: FlowState): number {
-  const questions = questionsFor(all, state.category);
+  const questions = questionsFor(all, state.category, state.budgetShare);
   return questions.filter((q) => !state.answers[q.id] && isVisible(q, state.answers)).length;
 }
 
-export function evaluate(all: Question[], category: CategoryId, answers: Answers): Result {
-  const questions = questionsFor(all, category);
+/**
+ * Scores a finished (or partial) evaluation. `budgetShare` is the price divided
+ * by the monthly budget; leave it undefined when either is unknown.
+ */
+export function evaluate(
+  all: Question[],
+  category: CategoryId,
+  answers: Answers,
+  budgetShare?: number,
+): Result {
+  const questions = questionsFor(all, category, budgetShare);
   const answered = questions.filter((q) => answers[q.id]);
   const maybeCount = answered.filter((q) => answers[q.id] === 'maybe').length;
-  const score = computeScore(questions, answers);
+  const score = computeScore(questions, answers, budgetShare);
   return {
     score,
     verdict: verdictFor(score),
-    dimensions: computeDimensions(questions, answers),
+    dimensions: computeDimensions(questions, answers, budgetShare),
     confidence: computeConfidence(score, answered.length, maybeCount),
     drivers: computeDrivers(questions, answers),
+    budget: budgetImpact(budgetShare),
     answeredCount: answered.length,
     maybeCount,
   };

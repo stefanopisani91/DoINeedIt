@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { it } from '@/i18n/it';
 import { shareUrl } from '@/lib/share';
 import { useDraftStore } from '@/storage/draft';
+import { useSettingsStore } from '@/storage/settings';
 import { selectItem, useItemsStore } from '@/storage/store';
 import { Button, ButtonLink } from '../components/Button';
 import { buttonClass } from '../components/button-styles';
@@ -16,6 +17,7 @@ export function ItemDetailPage() {
   const upsert = useItemsStore((state) => state.upsert);
   const remove = useItemsStore((state) => state.remove);
   const setDraft = useDraftStore((state) => state.setDraft);
+  const budget = useSettingsStore((state) => state.budget);
   const [copied, setCopied] = useState(false);
   const [note, setNote] = useState(item?.note ?? '');
 
@@ -67,8 +69,20 @@ export function ItemDetailPage() {
     navigate('/', { replace: true });
   };
 
+  const budgetNotice = item.result.budget ? null : !budget ? (
+    <Notice>
+      {it.result.budgetMissing.setBudget}{' '}
+      <Link to="/settings" className="font-semibold underline underline-offset-4">
+        {it.result.budgetMissing.link}
+      </Link>
+    </Notice>
+  ) : !item.price ? (
+    <Notice>{it.result.budgetMissing.addPrice}</Notice>
+  ) : null;
+
   return (
     <div className="space-y-6">
+      {budgetNotice}
       <ResultView item={item} />
 
       <section className="rounded-3xl bg-white p-6 ring-1 ring-stone-200 dark:bg-stone-900 dark:ring-stone-800">

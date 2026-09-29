@@ -12,11 +12,51 @@ interface ResultViewProps {
   item: Item;
 }
 
+function contributionBadge(contribution: number) {
+  if (contribution > 0) {
+    return {
+      sign: '+',
+      label: it.result.contributionFor,
+      className: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200',
+    };
+  }
+  if (contribution < 0) {
+    return {
+      sign: '−',
+      label: it.result.contributionAgainst,
+      className: 'bg-rose-100 text-rose-800 dark:bg-rose-900/50 dark:text-rose-200',
+    };
+  }
+  return {
+    sign: '=',
+    label: it.result.contributionNeutral,
+    className: 'bg-stone-200 text-stone-700 dark:bg-stone-800 dark:text-stone-300',
+  };
+}
+
+function Badge({ contribution }: { contribution: number }) {
+  const badge = contributionBadge(contribution);
+  return (
+    <span
+      className={`mt-0.5 inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-md px-1 text-xs font-bold tabular-nums ${badge.className}`}
+      aria-label={badge.label}
+    >
+      {badge.sign}
+    </span>
+  );
+}
+
 /** The full read-only presentation of an evaluated item, shared by the detail and shared pages. */
 export function ResultView({ item }: ResultViewProps) {
   const { result } = item;
   const style = verdictStyle(result.verdict);
   const category = categoryById(item.category);
+  const budgetLine = result.budget
+    ? it.result.budgetShare(
+        Math.round(result.budget.share * 100),
+        item.budget ? formatPrice(item.budget.amount, item.budget.currency) : undefined,
+      )
+    : null;
 
   return (
     <div className="space-y-6">
@@ -55,24 +95,21 @@ export function ResultView({ item }: ResultViewProps) {
           <h2 className="mt-5 text-sm font-semibold uppercase tracking-wide text-stone-500 dark:text-stone-400">
             {it.result.why}
           </h2>
-          {result.drivers.length === 0 ? (
+          {result.drivers.length === 0 && !budgetLine ? (
             <p className="mt-2 text-sm text-stone-600 dark:text-stone-300">
               {it.result.driversEmpty}
             </p>
           ) : (
             <ul className="mt-2 space-y-2">
+              {result.budget && budgetLine && (
+                <li className="flex items-start gap-2 text-sm">
+                  <Badge contribution={result.budget.contribution} />
+                  <span className="text-stone-700 dark:text-stone-200">{budgetLine}</span>
+                </li>
+              )}
               {result.drivers.map((driver) => (
                 <li key={driver.questionId} className="flex items-start gap-2 text-sm">
-                  <span
-                    className={`mt-0.5 inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-md px-1 text-xs font-bold tabular-nums ${
-                      driver.contribution > 0
-                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200'
-                        : 'bg-rose-100 text-rose-800 dark:bg-rose-900/50 dark:text-rose-200'
-                    }`}
-                    aria-label={driver.contribution > 0 ? 'a favore' : 'contro'}
-                  >
-                    {driver.contribution > 0 ? '+' : '−'}
-                  </span>
+                  <Badge contribution={driver.contribution} />
                   <span>
                     <span className="text-stone-700 dark:text-stone-200">{driver.text}</span>{' '}
                     <span className="font-semibold">{it.answers[driver.answer]}</span>

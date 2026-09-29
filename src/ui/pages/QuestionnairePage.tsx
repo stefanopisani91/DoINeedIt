@@ -3,6 +3,7 @@ import { Navigate, useNavigate } from 'react-router-dom';
 import {
   ENGINE_VERSION,
   applyAnswer,
+  budgetShare,
   evaluate,
   nextQuestion,
   remainingUpperBound,
@@ -14,6 +15,7 @@ import { QUESTIONS } from '@/data/questions';
 import { it } from '@/i18n/it';
 import { newId } from '@/lib/format';
 import { useDraftStore } from '@/storage/draft';
+import { useSettingsStore } from '@/storage/settings';
 import { useItemsStore } from '@/storage/store';
 import type { Item } from '@/storage/types';
 import { Button } from '../components/Button';
@@ -25,11 +27,16 @@ export function QuestionnairePage() {
   const draft = useDraftStore((state) => state.draft);
   const clearDraft = useDraftStore((state) => state.clearDraft);
   const upsert = useItemsStore((state) => state.upsert);
-  const [flow, setFlow] = useState<FlowState>(() => ({
-    category: draft?.category ?? 'other',
-    answers: {},
-    askedOrder: [],
-  }));
+  const budget = useSettingsStore((state) => state.budget);
+  const [flow, setFlow] = useState<FlowState>(() => {
+    const share = budgetShare(draft?.price, budget);
+    return {
+      category: draft?.category ?? 'other',
+      answers: {},
+      askedOrder: [],
+      ...(share !== undefined ? { budgetShare: share } : {}),
+    };
+  });
 
   const question = useMemo(() => nextQuestion(QUESTIONS, flow), [flow]);
   const answered = flow.askedOrder.length;
@@ -49,16 +56,17 @@ export function QuestionnairePage() {
         category: draft.category,
         answers: state.answers,
         askedOrder: state.askedOrder,
-        result: evaluate(QUESTIONS, draft.category, state.answers),
+        result: evaluate(QUESTIONS, draft.category, state.answers, state.budgetShare),
         engineVersion: ENGINE_VERSION,
         ...(draft.imageUrl ? { imageUrl: draft.imageUrl } : {}),
         ...(draft.price ? { price: draft.price } : {}),
+        ...(state.budgetShare !== undefined && budget ? { budget } : {}),
       };
       upsert(item);
       clearDraft();
       navigate(`/items/${id}`, { replace: true });
     },
-    [draft, upsert, clearDraft, navigate],
+    [draft, budget, upsert, clearDraft, navigate],
   );
 
   const onAnswer = useCallback(

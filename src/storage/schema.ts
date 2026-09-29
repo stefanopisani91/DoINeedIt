@@ -37,6 +37,11 @@ export const resultSchema = z.object({
       contribution: z.number(),
     }),
   ),
+  // Results stored before the budget criterion have no budget component.
+  budget: z
+    .object({ share: z.number().min(0), contribution: z.number() })
+    .nullable()
+    .default(null),
   answeredCount: z.number().int().min(0),
   maybeCount: z.number().int().min(0),
 });
@@ -60,6 +65,7 @@ export const itemSchema = z.object({
   category,
   answers: z.record(z.string(), answer),
   askedOrder: z.array(z.string()),
+  budget: priceSchema.optional(),
   result: resultSchema,
   engineVersion: z.number().int(),
   note: z.string().max(2000).optional(),

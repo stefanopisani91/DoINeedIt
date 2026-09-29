@@ -2,11 +2,16 @@ import { describe, expect, it } from 'vitest';
 import {
   answerValue,
   applyAnswer,
+  budgetImpact,
+  budgetShare,
+  budgetValue,
   computeConfidence,
+  computeDimensions,
   computeScore,
   evaluate,
   nextQuestion,
   questionsFor,
+  remainingUpperBound,
   undoLastAnswer,
   verdictFor,
   type Answer,
@@ -111,7 +116,7 @@ describe('question bank integrity', () => {
   it('gives every category the same core and tie-break questions plus its own deepening ones', () => {
     for (const category of CATEGORIES) {
       const list = questionsFor(QUESTIONS, category.id);
-      expect(list.filter((x) => x.stage === 1)).toHaveLength(7);
+      expect(list.filter((x) => x.stage === 1)).toHaveLength(8);
       expect(list.filter((x) => x.stage === 3)).toHaveLength(3);
       const specific = list.filter((x) => x.categories);
       expect(specific).toHaveLength(category.id === 'other' ? 0 : 3);
@@ -121,11 +126,107 @@ describe('question bank integrity', () => {
       expect(stage2.slice(0, firstGeneric).every((x) => x.categories)).toBe(true);
     }
   });
+
+  it('has three generic budget questions, one of them core', () => {
+    const budget = QUESTIONS.filter((x) => x.dimension === 'budget');
+    expect(budget).toHaveLength(3);
+    expect(budget.every((x) => !x.categories && x.polarity === 'skip')).toBe(true);
+    expect(budget.filter((x) => x.stage === 1)).toHaveLength(1);
+  });
+
+  it('leaves the budget questions out when the price is a negligible share of the budget', () => {
+    const cheap = questionsFor(QUESTIONS, 'tech', 0.02);
+    expect(cheap.some((x) => x.dimension === 'budget')).toBe(false);
+    expect(cheap.filter((x) => x.stage === 1)).toHaveLength(7);
+    const pricey = questionsFor(QUESTIONS, 'tech', 0.05);
+    expect(pricey.filter((x) => x.dimension === 'budget')).toHaveLength(3);
+    expect(questionsFor(QUESTIONS, 'tech')).toEqual(pricey);
+  });
+});
+
+describe('budget component', () => {
+  it('computes the share of the budget only when price and budget are comparable', () => {
+    expect(budgetShare({ amount: 120, currency: 'EUR' }, { amount: 400, currency: 'EUR' })).toBe(
+      0.3,
+    );
+    expect(budgetShare({ amount: 120, currency: 'USD' }, { amount: 400, currency: 'EUR' })).toBe(
+      undefined,
+    );
+    expect(budgetShare(undefined, { amount: 400, currency: 'EUR' })).toBeUndefined();
+    expect(budgetShare({ amount: 120, currency: 'EUR' }, null)).toBeUndefined();
+    expect(budgetShare({ amount: 120, currency: 'EUR' }, { amount: 0, currency: 'EUR' })).toBe(
+      undefined,
+    );
+  });
+
+  it('maps the share to five bands', () => {
+    expect(budgetValue(0)).toBe(1);
+    expect(budgetValue(0.05)).toBe(1);
+    expect(budgetValue(0.1)).toBe(0.5);
+    expect(budgetValue(0.3)).toBe(0);
+    expect(budgetValue(0.45)).toBe(-0.5);
+    expect(budgetValue(0.6)).toBe(-0.5);
+    expect(budgetValue(0.61)).toBe(-1);
+    expect(budgetValue(5)).toBe(-1);
+  });
+
+  it('weighs as much as the strongest question', () => {
+    expect(budgetImpact(undefined)).toBeNull();
+    expect(budgetImpact(0.8)).toEqual({ share: 0.8, contribution: -3 });
+    const questions = [q({ id: 'a', weight: 3 })];
+    // (+3 − 3) / (3 + 3) → neutral
+    expect(computeScore(questions, { a: 'yes' }, 0.8)).toBe(50);
+    // a neutral band still counts in the denominator: (+3 + 0) / 6
+    expect(computeScore(questions, { a: 'yes' }, 0.2)).toBe(75);
+    expect(computeScore(questions, { a: 'yes' })).toBe(100);
+  });
+
+  it('feeds the budget dimension even without budget questions answered', () => {
+    const questions = [q({ id: 'a', weight: 3 })];
+    expect(computeDimensions(questions, { a: 'yes' }).budget).toBeNull();
+    expect(computeDimensions(questions, { a: 'yes' }, 0.03).budget).toBe(100);
+    expect(computeDimensions(questions, { a: 'yes' }, 0.03).utility).toBe(100);
+    const withQuestion = [...questions, q({ id: 'b', dimension: 'budget', polarity: 'skip' })];
+    // budget: (+3 from the price − 1 from the answer) / 4
+    expect(computeDimensions(withQuestion, { a: 'yes', b: 'yes' }, 0.03).budget).toBe(75);
+  });
+
+  it('counts toward the early stop and skips the budget questions for a cheap product', () => {
+    let state: FlowState = { category: 'tech', answers: {}, askedOrder: [], budgetShare: 0.01 };
+    for (;;) {
+      const question = nextQuestion(QUESTIONS, state);
+      if (!question) break;
+      expect(question.dimension).not.toBe('budget');
+      state = applyAnswer(state, question.id, question.polarity === 'need' ? 'yes' : 'no');
+    }
+    expect(state.askedOrder).toHaveLength(5);
+    const result = evaluate(QUESTIONS, 'tech', state.answers, state.budgetShare);
+    expect(result.budget).toEqual({ share: 0.01, contribution: 3 });
+    expect(result.dimensions.budget).toBe(100);
+    expect(result.score).toBe(100);
+  });
+
+  it('asks the budget questions and reports the impact for an expensive product', () => {
+    const state: FlowState = { category: 'tech', answers: {}, askedOrder: [], budgetShare: 0.9 };
+    const cheap: FlowState = { ...state, budgetShare: 0.01 };
+    expect(remainingUpperBound(QUESTIONS, state) - remainingUpperBound(QUESTIONS, cheap)).toBe(3);
+    const core = runFlowFrom(state, (question) => (question.polarity === 'need' ? 'yes' : 'no'));
+    expect(core.askedOrder).toContain('budget_sacrifice');
+    const result = evaluate(QUESTIONS, 'tech', core.answers, 0.9);
+    expect(result.budget).toEqual({ share: 0.9, contribution: -3 });
+    // every answer says "need" (+15 over 15) but the price says "skip" (−3 over 3)
+    expect(result.score).toBe(Math.round(50 + (50 * 12) / 18));
+    expect(result.dimensions.budget).toBe(50);
+  });
 });
 
 /** Runs the flow to completion answering with the given strategy. */
 function runFlow(category: FlowState['category'], strategy: (question: Question) => Answer) {
-  let state: FlowState = { category, answers: {}, askedOrder: [] };
+  return runFlowFrom({ category, answers: {}, askedOrder: [] }, strategy);
+}
+
+function runFlowFrom(initial: FlowState, strategy: (question: Question) => Answer) {
+  let state = initial;
   let guard = 0;
   for (;;) {
     const question = nextQuestion(QUESTIONS, state);
@@ -155,14 +256,14 @@ describe('adaptive flow', () => {
 
   it('stops after the core stage when the purchase is clearly unnecessary', () => {
     const state = runFlow('tech', (question) => (question.polarity === 'skip' ? 'yes' : 'no'));
-    expect(state.askedOrder).toHaveLength(7);
+    expect(state.askedOrder).toHaveLength(8);
     expect(evaluate(QUESTIONS, 'tech', state.answers).score).toBe(0);
     expect(evaluate(QUESTIONS, 'tech', state.answers).verdict).toBe('skip');
   });
 
   it('stops after the core stage when the purchase is clearly necessary', () => {
     const state = runFlow('home', (question) => (question.polarity === 'need' ? 'yes' : 'no'));
-    expect(state.askedOrder).toHaveLength(5);
+    expect(state.askedOrder).toHaveLength(6);
     expect(evaluate(QUESTIONS, 'home', state.answers).verdict).toBe('buy');
   });
 
@@ -187,6 +288,7 @@ describe('adaptive flow', () => {
       weekly_use: 'maybe',
       problem_soon: 'no',
       impulse_today: 'no',
+      budget_sacrifice: 'no',
     };
     let state: FlowState = { category: 'sport', answers: core, askedOrder: Object.keys(core) };
     expect(nextQuestion(QUESTIONS, state)?.stage).toBe(2);
@@ -203,10 +305,10 @@ describe('adaptive flow', () => {
     expect(evaluate(QUESTIONS, 'sport', state.answers).verdict).toBe('buy');
   });
 
-  it('never asks more than 18 questions', () => {
+  it('never asks more than 20 questions', () => {
     for (const category of CATEGORIES) {
       const state = runFlow(category.id, () => 'maybe');
-      expect(state.askedOrder.length).toBeLessThanOrEqual(18);
+      expect(state.askedOrder.length).toBeLessThanOrEqual(20);
     }
   });
 });
@@ -219,6 +321,7 @@ describe('evaluate', () => {
     expect(result.dimensions.impulse).toBe(0);
     expect(result.dimensions.urgency).toBeNull();
     expect(result.dimensions.budget).toBeNull();
+    expect(result.budget).toBeNull();
     expect(result.answeredCount).toBe(3);
     expect(result.drivers.map((d) => d.questionId)).toEqual([
       'own_similar',

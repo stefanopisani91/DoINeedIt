@@ -3,8 +3,8 @@ export type Answer = 'yes' | 'no' | 'maybe';
 
 /**
  * The aspects of a purchase the engine evaluates.
- * `budget` is reserved for the upcoming budget criterion: the engine already
- * handles it, it simply has no questions yet.
+ * `budget` combines the budget questions with the automatic comparison of the
+ * price against the monthly budget, when both are known.
  */
 export type Dimension = 'utility' | 'urgency' | 'alternatives' | 'impulse' | 'budget';
 
@@ -41,6 +41,20 @@ export interface Question {
 
 export type Answers = Record<string, Answer>;
 
+/** An amount of money in an ISO 4217 currency, e.g. a price or a monthly budget. */
+export interface Money {
+  amount: number;
+  currency: string;
+}
+
+/** The product price compared with the monthly budget. */
+export interface BudgetImpact {
+  /** Price divided by the monthly budget: 0.38 means 38% of the budget. */
+  share: number;
+  /** Signed, weighted contribution to the score, comparable to a driver's. */
+  contribution: number;
+}
+
 export interface Driver {
   questionId: string;
   text: string;
@@ -59,6 +73,8 @@ export interface Result {
   confidence: number;
   /** The answers that moved the score the most, strongest first. */
   drivers: Driver[];
+  /** The automatic price-versus-budget component, or null when price or budget were unknown. */
+  budget: BudgetImpact | null;
   answeredCount: number;
   maybeCount: number;
 }
@@ -68,4 +84,6 @@ export interface FlowState {
   answers: Answers;
   /** Ids of the questions asked so far, in the order they were shown. */
   askedOrder: string[];
+  /** Price divided by the monthly budget; absent when either is unknown. */
+  budgetShare?: number;
 }

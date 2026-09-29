@@ -1,4 +1,4 @@
-import { ENGINE_VERSION, evaluate, type Answers, type CategoryId } from '@/engine';
+import { ENGINE_VERSION, budgetShare, evaluate, type Answers, type CategoryId } from '@/engine';
 import type { Item, Price } from '@/storage/types';
 import { QUESTIONS } from './questions';
 
@@ -14,6 +14,9 @@ interface ExampleSeed {
   answers: Answers;
   note?: string;
 }
+
+/** The monthly budget the example items were evaluated against. */
+const EXAMPLE_BUDGET: Price = { amount: 400, currency: 'EUR' };
 
 const SEEDS: ExampleSeed[] = [
   {
@@ -33,6 +36,7 @@ const SEEDS: ExampleSeed[] = [
       weekly_use: 'yes',
       problem_soon: 'no',
       impulse_today: 'yes',
+      budget_sacrifice: 'yes',
     },
     note: 'Viste in un video, le mie funzionano ancora benissimo.',
   },
@@ -51,12 +55,15 @@ const SEEDS: ExampleSeed[] = [
       weekly_use: 'yes',
       problem_soon: 'no',
       impulse_today: 'no',
+      budget_sacrifice: 'no',
       kitchen_frequency: 'yes',
       kitchen_same_result: 'maybe',
       kitchen_reach: 'yes',
       local_cheaper: 'no',
       borrow_rent_used: 'no',
       replace_broken: 'no',
+      budget_month_spent: 'no',
+      budget_regret: 'maybe',
       wanted_before: 'yes',
       full_price_later: 'maybe',
       wait_30_days: 'maybe',
@@ -81,6 +88,7 @@ const SEEDS: ExampleSeed[] = [
       weekly_use: 'yes',
       problem_soon: 'yes',
       impulse_today: 'no',
+      budget_sacrifice: 'no',
     },
     note: 'Le vecchie hanno 900 km e mi fanno male al ginocchio.',
   },
@@ -106,7 +114,13 @@ function toItem(seed: ExampleSeed): Item {
     category: seed.category,
     answers: seed.answers,
     askedOrder,
-    result: evaluate(QUESTIONS, seed.category, seed.answers),
+    budget: EXAMPLE_BUDGET,
+    result: evaluate(
+      QUESTIONS,
+      seed.category,
+      seed.answers,
+      budgetShare(seed.price, EXAMPLE_BUDGET),
+    ),
     engineVersion: ENGINE_VERSION,
   };
   if (seed.note) item.note = seed.note;

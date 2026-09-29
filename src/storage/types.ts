@@ -22,6 +22,8 @@ export interface Item {
   category: CategoryId;
   answers: Answers;
   askedOrder: string[];
+  /** The monthly budget the price was compared with, when the evaluation used one. */
+  budget?: Price;
   result: Result;
   engineVersion: number;
   note?: string;

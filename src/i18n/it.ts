@@ -1,3 +1,10 @@
+/** "l’8%", "l’80%", "l’11%", but "il 18%" and "il 100%": the article follows the sound of the number. */
+function percentWithArticle(percent: number): string {
+  const vowelSound =
+    percent === 1 || percent === 8 || percent === 11 || (percent >= 80 && percent <= 89);
+  return `${vowelSound ? 'l’' : 'il '}${percent}%`;
+}
+
 /** All user-facing copy, in Italian. Kept in one place to make a second language easy. */
 export const it = {
   app: {
@@ -25,7 +32,7 @@ export const it = {
     urgency: 'Quanto è urgente averlo',
     alternatives: 'Quanto è difficile fare a meno di comprarlo nuovo',
     impulse: 'Quanto la scelta è ragionata e non d’impulso',
-    budget: 'Quanto pesa sul tuo budget',
+    budget: 'Quanto è sostenibile per il tuo budget',
   },
   suggestions: {
     buy: [
@@ -108,6 +115,17 @@ export const it = {
       maybe > 0 ? `${n} risposte, di cui ${maybe} “forse”` : `${n} risposte`,
     why: 'Perché',
     driversEmpty: 'Hai risposto “forse” a tutto: il punteggio resta in mezzo.',
+    budgetShare: (percent: number, budget?: string) =>
+      `Costa ${percentWithArticle(percent)} del tuo budget mensile${budget ? ` di ${budget}` : ''}`,
+    contributionFor: 'a favore',
+    contributionAgainst: 'contro',
+    contributionNeutral: 'neutro',
+    budgetMissing: {
+      setBudget: 'Con un budget mensile il prezzo pesa nel punteggio.',
+      link: 'Imposta il budget',
+      addPrice:
+        'Questo prodotto non ha un prezzo: aggiungilo quando lo rivaluti e peserà sul tuo budget mensile.',
+    },
     dimensionsTitle: 'I parametri',
     noData: 'Nessuna domanda su questo aspetto',
     suggestionsTitle: 'Cosa farei',
@@ -150,9 +168,21 @@ export const it = {
     clear: 'Cancella tutto',
     clearConfirm: 'Cancellare tutti gli oggetti valutati? Non si può annullare.',
     cleared: 'Tutto cancellato.',
+    budgetTitle: 'Il tuo budget',
+    budgetBody:
+      'Quanto puoi spendere ogni mese per gli acquisti non indispensabili. Il prezzo di ogni prodotto viene confrontato con questa cifra e pesa nel punteggio. È un’impostazione di questo browser: ogni valutazione ricorda il budget con cui è stata fatta, e quello viaggia con la valutazione anche nei file esportati e nei link condivisi.',
+    budgetLabel: 'Budget mensile in euro',
+    budgetPlaceholder: 'Es. 300',
+    budgetSave: 'Salva il budget',
+    budgetRemove: 'Rimuovi',
+    budgetCurrent: (amount: string) => `Budget attuale: ${amount} al mese.`,
+    budgetNone: 'Nessun budget impostato: il prezzo non pesa nel punteggio.',
+    budgetSaved: (amount: string) => `Budget mensile salvato: ${amount}.`,
+    budgetRemoved: 'Budget rimosso.',
+    budgetInvalid: 'Scrivi un importo maggiore di zero.',
     aboutTitle: 'Come funziona',
     aboutBody:
-      'Ogni risposta sposta un punteggio da 0 a 100: le risposte più importanti pesano di più, “forse” lascia il punteggio a metà. Le domande di base bastano quando il verdetto è chiaro; se resta in bilico, ne arrivano altre, mirate alla categoria, fino a un massimo di una ventina.',
+      'Ogni risposta sposta un punteggio da 0 a 100: le risposte più importanti pesano di più, “forse” lascia il punteggio a metà. Le domande di base bastano quando il verdetto è chiaro; se resta in bilico, ne arrivano altre, mirate alla categoria, fino a un massimo di una ventina. Con un budget mensile impostato, anche il prezzo pesa.',
     privacy: 'Informativa sulla privacy',
     source: 'Codice sorgente',
   },
@@ -161,7 +191,7 @@ export const it = {
     sections: [
       {
         heading: 'Cosa salvo',
-        body: 'I prodotti che valuti, le risposte che dai, il punteggio e le note. Tutto resta nella memoria del tuo browser (localStorage), su questo dispositivo.',
+        body: 'I prodotti che valuti, le risposte che dai, il punteggio, le note e il budget mensile. Tutto resta nella memoria del tuo browser (localStorage), su questo dispositivo.',
       },
       {
         heading: 'Cosa non faccio',

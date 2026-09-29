@@ -36,14 +36,18 @@ test.describe('evaluating a product', () => {
       'Lo useresti almeno una volta a settimana nei prossimi tre mesi?': 'No',
       'Se non lo comprassi, avresti un problema concreto entro un mese?': 'No',
       'Hai deciso di comprarlo oggi, sull’onda di un’offerta, di un video o di un consiglio?': 'Sì',
+      'Per pagarlo dovresti intaccare i risparmi, pagare a rate o rinunciare a qualcosa che avevi già programmato?':
+        'Sì',
     };
     await answerUntilResult(page, (text) => answers[text] ?? 'Forse');
 
     await expect(page).toHaveURL(/\/items\//);
     await expect(page.getByText('Non ti serve', { exact: true })).toBeVisible();
     await expect(page.getByRole('img', { name: /0% necessità/ })).toBeVisible();
-    await expect(page.getByText('7 risposte')).toBeVisible();
+    await expect(page.getByText('8 risposte')).toBeVisible();
     await expect(page.getByText('89,90')).toBeVisible();
+    // Without a monthly budget the price could not weigh in, and the page says so.
+    await expect(page.getByText(/Con un budget mensile il prezzo pesa/)).toBeVisible();
 
     await page.getByRole('link', { name: 'I miei oggetti' }).click();
     await expect(page.getByRole('heading', { name: 'Terzo paio di cuffie' })).toBeVisible();
@@ -87,6 +91,35 @@ test.describe('evaluating a product', () => {
     await expect(
       page.getByText('Prepari quel tipo di piatto almeno ogni due settimane?'),
     ).toBeVisible();
+  });
+
+  test('with a monthly budget the price weighs in the score', async ({ page }) => {
+    await page.goto('/settings');
+    await page.getByLabel('Budget mensile in euro').fill('400');
+    await page.getByRole('button', { name: 'Salva il budget' }).click();
+    await expect(page.getByText(/Budget mensile salvato: 400,00/)).toBeVisible();
+
+    await page.goto('/new');
+    await page.getByLabel('Nome del prodotto').fill('Bici da città');
+    await page.getByLabel('Prezzo (facoltativo)').fill('300');
+    await page.getByText('Sport e hobby', { exact: true }).click();
+    await page.getByRole('button', { name: 'Inizia le domande' }).click();
+
+    // Every answer says "need", the price (75% of the budget) says "skip".
+    const skipQuestions = [
+      'Hai già qualcosa che svolge la stessa funzione?',
+      'Hai deciso di comprarlo oggi, sull’onda di un’offerta, di un video o di un consiglio?',
+      'Per pagarlo dovresti intaccare i risparmi, pagare a rate o rinunciare a qualcosa che avevi già programmato?',
+    ];
+    await answerUntilResult(page, (text) => (skipQuestions.includes(text) ? 'No' : 'Sì'));
+
+    await expect(page.getByText('Ti serve davvero', { exact: true })).toBeVisible();
+    await expect(page.getByRole('img', { name: /83% necessità/ })).toBeVisible();
+    await expect(page.getByText(/Costa il 75% del tuo budget mensile di 400,00/)).toBeVisible();
+    await expect(page.getByRole('meter', { name: 'Budget' })).toHaveAttribute(
+      'aria-valuenow',
+      '50',
+    );
   });
 
   test('shows the manual form when Amazon blocks the preview', async ({ page }) => {

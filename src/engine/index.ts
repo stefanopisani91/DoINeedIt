@@ -2,6 +2,9 @@ export * from './types';
 export * from './config';
 export {
   answerValue,
+  budgetShare,
+  budgetValue,
+  budgetImpact,
   computeScore,
   computeDimensions,
   computeConfidence,

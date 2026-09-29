@@ -1,5 +1,15 @@
-import type { Answer, Answers, Dimension, Driver, Polarity, Question, Verdict } from './types';
-import { MAX_DRIVERS, VERDICT } from './config';
+import type {
+  Answer,
+  Answers,
+  BudgetImpact,
+  Dimension,
+  Driver,
+  Money,
+  Polarity,
+  Question,
+  Verdict,
+} from './types';
+import { BUDGET_BANDS, BUDGET_WEIGHT, MAX_DRIVERS, VERDICT } from './config';
 
 export const DIMENSIONS: Dimension[] = ['utility', 'urgency', 'alternatives', 'impulse', 'budget'];
 
@@ -10,12 +20,39 @@ export function answerValue(answer: Answer, polarity: Polarity): number {
   return polarity === 'need' ? base : -base;
 }
 
+/**
+ * Price divided by the monthly budget, or undefined when either is missing
+ * or they are not in the same currency.
+ */
+export function budgetShare(price?: Money, budget?: Money | null): number | undefined {
+  if (!price || !budget) return undefined;
+  if (price.currency !== budget.currency) return undefined;
+  if (!(budget.amount > 0) || !(price.amount >= 0)) return undefined;
+  return price.amount / budget.amount;
+}
+
+/** Signed value of a share of the budget, −1 to +1, by band. */
+export function budgetValue(share: number): number {
+  const band = BUDGET_BANDS.find((b) => share <= b.upTo) ?? BUDGET_BANDS[BUDGET_BANDS.length - 1];
+  return band?.value ?? -1;
+}
+
+export function budgetImpact(share: number | undefined): BudgetImpact | null {
+  if (share === undefined) return null;
+  return { share, contribution: budgetValue(share) * BUDGET_WEIGHT };
+}
+
 interface Totals {
   numerator: number;
   denominator: number;
 }
 
-function accumulate(questions: Question[], answers: Answers, filter?: (q: Question) => boolean) {
+function accumulate(
+  questions: Question[],
+  answers: Answers,
+  budget: BudgetImpact | null,
+  filter?: (q: Question) => boolean,
+) {
   const totals: Totals = { numerator: 0, denominator: 0 };
   for (const question of questions) {
     const answer = answers[question.id];
@@ -23,6 +60,10 @@ function accumulate(questions: Question[], answers: Answers, filter?: (q: Questi
     if (filter && !filter(question)) continue;
     totals.numerator += answerValue(answer, question.polarity) * question.weight;
     totals.denominator += question.weight;
+  }
+  if (budget) {
+    totals.numerator += budget.contribution;
+    totals.denominator += BUDGET_WEIGHT;
   }
   return totals;
 }
@@ -33,17 +74,24 @@ function toScore({ numerator, denominator }: Totals): number {
   return Math.round(50 + (50 * numerator) / denominator);
 }
 
-export function computeScore(questions: Question[], answers: Answers): number {
-  return toScore(accumulate(questions, answers));
+export function computeScore(questions: Question[], answers: Answers, share?: number): number {
+  return toScore(accumulate(questions, answers, budgetImpact(share)));
 }
 
 export function computeDimensions(
   questions: Question[],
   answers: Answers,
+  share?: number,
 ): Record<Dimension, number | null> {
   const out = {} as Record<Dimension, number | null>;
+  const budget = budgetImpact(share);
   for (const dimension of DIMENSIONS) {
-    const totals = accumulate(questions, answers, (q) => q.dimension === dimension);
+    const totals = accumulate(
+      questions,
+      answers,
+      dimension === 'budget' ? budget : null,
+      (q) => q.dimension === dimension,
+    );
     out[dimension] = totals.denominator === 0 ? null : toScore(totals);
   }
   return out;
