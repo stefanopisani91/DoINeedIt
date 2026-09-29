@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import handler from '../edge-functions/wishlist.ts';
-import { WISHLIST_PAGE } from './wishlist-parser.test';
+import { WISHLIST_FRAGMENT, WISHLIST_PAGE } from './wishlist-parser.test';
 
 function htmlResponse(body: string, status = 200, headers: Record<string, string> = {}) {
   return new Response(body, { status, headers: { 'content-type': 'text/html', ...headers } });
@@ -44,6 +44,7 @@ describe('wishlist function', () => {
       title: 'Regali di Natale',
       url: 'https://www.amazon.it/hz/wishlist/ls/2ABCDEF12345',
       marketplace: 'it',
+      complete: true,
     });
     expect(body.list.items).toHaveLength(3);
     expect(body.list.items[0]).toMatchObject({ asin: 'B0H82G3QD4', price: { amount: 129.9 } });
@@ -119,6 +120,78 @@ describe('wishlist function', () => {
     expect((await call('https://www.amazon.it/hz/wishlist/ls/SLOW1')).body).toEqual({
       ok: false,
       reason: 'unreachable',
+    });
+  });
+
+  describe('lists longer than one page', () => {
+    const withMore = (html: string, token: string) =>
+      html.replace(
+        '</ul>',
+        `<li><input type="hidden" name="showMoreUrl" value="/hz/wishlist/slv/items?filter=persistent_all&amp;paginationToken=${token}" id="showMoreUrl"/></li></ul>`,
+      );
+
+    it('follows the "show more" chain to the end and says the list is complete', async () => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(htmlResponse(withMore(WISHLIST_PAGE, 'PAGE2')))
+        .mockResolvedValueOnce(htmlResponse(WISHLIST_FRAGMENT))
+        .mockResolvedValueOnce(htmlResponse('<ul id="g-items"></ul>'));
+      vi.stubGlobal('fetch', fetchMock);
+      const { body } = await call('https://www.amazon.it/hz/wishlist/ls/2ABCDEF12345');
+      expect(body.list.complete).toBe(true);
+      expect(body.list.items.map((i: { asin: string }) => i.asin)).toEqual([
+        'B0H82G3QD4',
+        'B08N5WRWNW',
+        'B0EXAMPLE9',
+        'B01KXSELDK',
+        'B0787KPCPX',
+      ]);
+      const urls = fetchMock.mock.calls.map((c) => String((c as unknown as [URL])[0]));
+      expect(urls).toEqual([
+        'https://www.amazon.it/hz/wishlist/ls/2ABCDEF12345',
+        'https://www.amazon.it/hz/wishlist/slv/items?filter=persistent_all&paginationToken=PAGE2',
+        'https://www.amazon.it/hz/wishlist/slv/items?filter=persistent_all&paginationToken=PAGE3',
+      ]);
+      // Prices of the fragment follow the marketplace of the list, not the fixture's.
+      expect(body.list.items[4].price).toEqual({ amount: 10.35, currency: 'EUR' });
+    });
+
+    it('stops when the end marker appears or a page brings nothing new', async () => {
+      const lastPage = WISHLIST_FRAGMENT.replace(
+        '<ul id="g-items"',
+        '<div id="endOfListMarker"></div><ul id="g-items"',
+      );
+      vi.stubGlobal(
+        'fetch',
+        vi
+          .fn()
+          .mockResolvedValueOnce(htmlResponse(withMore(WISHLIST_PAGE, 'PAGE2')))
+          .mockResolvedValueOnce(htmlResponse(lastPage)),
+      );
+      let { body } = await call('https://www.amazon.it/hz/wishlist/ls/2ABCDEF12345');
+      expect(body.list).toMatchObject({ complete: true });
+      expect(body.list.items).toHaveLength(5);
+
+      const repeating = vi.fn(async () => htmlResponse(withMore(WISHLIST_PAGE, 'AGAIN')));
+      vi.stubGlobal('fetch', repeating);
+      ({ body } = await call('https://www.amazon.it/hz/wishlist/ls/2ABCDEF12345'));
+      expect(body.list.items).toHaveLength(3);
+      expect(body.list.complete).toBe(true);
+      expect(repeating).toHaveBeenCalledTimes(2);
+    });
+
+    it('returns what it read, marked incomplete, when Amazon blocks a later page', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi
+          .fn()
+          .mockResolvedValueOnce(htmlResponse(withMore(WISHLIST_PAGE, 'PAGE2')))
+          .mockResolvedValue(htmlResponse('<title>Robot Check</title>')),
+      );
+      const { status, body } = await call('https://www.amazon.it/hz/wishlist/ls/2ABCDEF12345');
+      expect(status).toBe(200);
+      expect(body.list.items).toHaveLength(3);
+      expect(body.list.complete).toBe(false);
     });
   });
 });

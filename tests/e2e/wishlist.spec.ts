@@ -8,6 +8,7 @@ const LIST = {
     title: 'Regali di Natale',
     url: LIST_URL,
     marketplace: 'it',
+    complete: true,
     items: [
       {
         asin: 'B0H82G3QD4',

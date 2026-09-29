@@ -160,8 +160,9 @@ function WishlistImport({ url }: { url: string }) {
 
   return (
     <form onSubmit={onSubmit} className="space-y-4">
-      <Notice tone="success">
-        {copy.wishlist.found(list.items.length, list.title)} {copy.wishlist.partial}
+      <Notice tone={list.complete ? 'success' : 'warning'}>
+        {copy.wishlist.found(list.items.length, list.title)}
+        {!list.complete && <> {copy.wishlist.partial}</>}
       </Notice>
       <fieldset className="rounded-3xl bg-white p-4 ring-1 ring-stone-200 sm:p-6 dark:bg-stone-900 dark:ring-stone-800">
         <legend className="px-1 text-sm font-semibold uppercase tracking-wide text-stone-500 dark:text-stone-400">

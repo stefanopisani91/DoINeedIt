@@ -6,16 +6,22 @@ import { resolveShortLink } from './preview.ts';
 /**
  * GET /api/wishlist?url=<public Amazon wish list link>
  *
- * Reads the public list page once and returns the products it shows, so the
- * person can pick which ones to evaluate. Best effort: Amazon renders only
- * the first page of a list on the server, blocks automated readers now and
- * then, and private lists are not readable at all. Nothing is stored.
+ * Reads a public list and returns its products, so the person can pick which
+ * ones to evaluate. Amazon renders ten items per page and serves the rest
+ * through a "show more" url found in each page: the function follows that
+ * chain until the list ends, within a time budget, and says whether it got
+ * to the end. Best effort: Amazon blocks automated readers now and then,
+ * private lists are not readable at all. Nothing is stored.
  *
  * Same constraints as the product preview: edge function (not serverless),
  * Amazon-only redirects, size and time limits.
  */
 
 const CAPTCHA_ATTEMPTS = 3;
+/** Pages of ten items each; with the time budget below this is the cap on a huge list. */
+const MAX_PAGES = 50;
+/** Wall-clock budget for the whole read: the client waits, and the edge has its own limit. */
+const TIME_BUDGET_MS = 25_000;
 
 const ACCEPT_LANGUAGE: Record<string, string> = {
   it: 'it-IT,it;q=0.9,en;q=0.5',
@@ -35,12 +41,17 @@ export type WishlistFailure =
   | 'unparsable'
   | 'unreachable';
 
+export interface WishlistList {
+  title: string | null;
+  url: string;
+  marketplace: string;
+  items: WishlistItem[];
+  /** False when the list goes on but reading stopped (blocked, time, size). */
+  complete: boolean;
+}
+
 export type WishlistResponse =
-  | {
-      ok: true;
-      list: { title: string | null; url: string; marketplace: string; items: WishlistItem[] };
-    }
-  | { ok: false; reason: WishlistFailure };
+  { ok: true; list: WishlistList } | { ok: false; reason: WishlistFailure };
 
 const STATUS: Record<WishlistFailure, number> = {
   'invalid-url': 400,
@@ -59,15 +70,15 @@ function json(body: WishlistResponse, status = 200): Response {
   });
 }
 
-type LoadOutcome =
-  | { kind: 'list'; url: string; marketplace: string; title: string | null; items: WishlistItem[] }
-  | { kind: Exclude<WishlistFailure, 'invalid-url'> };
+type PageOutcome =
+  { kind: 'page'; url: string; html: string } | { kind: Exclude<WishlistFailure, 'invalid-url'> };
 
-async function loadList(startUrl: string, marketplace: string): Promise<LoadOutcome> {
+/** Fetches one list page or "show more" fragment, staying on Amazon hosts. */
+async function fetchListPage(url: string, marketplace: string): Promise<PageOutcome> {
   let page: FetchedPage;
   try {
-    page = await fetchPage(startUrl, {
-      allow: (url) => isAmazonHost(url.hostname),
+    page = await fetchPage(url, {
+      allow: (target) => isAmazonHost(target.hostname),
       acceptLanguage: ACCEPT_LANGUAGE[marketplace] ?? 'en-US,en;q=0.9',
     });
   } catch {
@@ -78,17 +89,88 @@ async function loadList(startUrl: string, marketplace: string): Promise<LoadOutc
   if (page.status === 404 || page.status === 410) return { kind: 'not-found' };
   if (page.status === 503) return { kind: 'blocked' };
   if (page.status >= 400) return { kind: 'unreachable' };
+  return { kind: 'page', url: page.url, html: page.html };
+}
 
-  const final = parseLink(page.url);
-  if (final.kind !== 'wishlist') return { kind: 'unsupported' };
-  const parsed = parseWishlistHtml(page.html, final.marketplace);
-  if (!parsed.ok) return { kind: parsed.reason };
+type LoadOutcome =
+  { kind: 'list'; list: WishlistList } | { kind: Exclude<WishlistFailure, 'invalid-url'> };
+
+/** The first page, with the usual retries in front of a captcha. */
+async function loadFirstPage(link: {
+  canonicalUrl: string;
+  marketplace: string;
+}): Promise<
+  | { kind: 'list'; title: string | null; items: WishlistItem[]; next: string | null; url: string }
+  | { kind: Exclude<WishlistFailure, 'invalid-url'> }
+> {
+  let outcome: PageOutcome = { kind: 'blocked' };
+  let parsed: ReturnType<typeof parseWishlistHtml> = { ok: false, reason: 'blocked' };
+  for (let attempt = 0; attempt < CAPTCHA_ATTEMPTS; attempt++) {
+    outcome = await fetchListPage(link.canonicalUrl, link.marketplace);
+    if (outcome.kind !== 'page') {
+      if (outcome.kind === 'blocked') continue;
+      return { kind: outcome.kind };
+    }
+    if (parseLink(outcome.url).kind !== 'wishlist') return { kind: 'unsupported' };
+    parsed = parseWishlistHtml(outcome.html, link.marketplace);
+    if (parsed.ok || parsed.reason !== 'blocked') break;
+  }
+  if (outcome.kind !== 'page') return { kind: outcome.kind };
+  if (!parsed.ok) return { kind: parsed.reason === 'empty' ? 'unparsable' : parsed.reason };
   return {
     kind: 'list',
-    url: final.canonicalUrl,
-    marketplace: final.marketplace,
     title: parsed.list.title,
     items: parsed.list.items,
+    next: parsed.list.nextPageUrl,
+    url: outcome.url,
+  };
+}
+
+async function loadList(link: { canonicalUrl: string; marketplace: string }): Promise<LoadOutcome> {
+  const started = Date.now();
+  const first = await loadFirstPage(link);
+  if (first.kind !== 'list') return { kind: first.kind };
+
+  const seen = new Set(first.items.map((item) => item.asin));
+  const items = [...first.items];
+  let next = first.next;
+  let complete = next === null;
+  let pageUrl = first.url;
+  for (let page = 1; next && page < MAX_PAGES; page++) {
+    if (Date.now() - started > TIME_BUDGET_MS) break;
+    let target: string;
+    try {
+      target = new URL(next, pageUrl).toString();
+    } catch {
+      break;
+    }
+    const outcome = await fetchListPage(target, link.marketplace);
+    if (outcome.kind !== 'page') break;
+    const parsed = parseWishlistHtml(outcome.html, link.marketplace);
+    if (!parsed.ok) {
+      // A readable page without products is the end of the list.
+      complete = parsed.reason === 'empty';
+      break;
+    }
+    const fresh = parsed.list.items.filter((item) => !seen.has(item.asin));
+    for (const item of fresh) {
+      seen.add(item.asin);
+      items.push(item);
+    }
+    pageUrl = outcome.url;
+    next = fresh.length > 0 ? parsed.list.nextPageUrl : null;
+    complete = next === null;
+  }
+
+  return {
+    kind: 'list',
+    list: {
+      title: first.title,
+      url: link.canonicalUrl,
+      marketplace: link.marketplace,
+      items,
+      complete,
+    },
   };
 }
 
@@ -105,14 +187,10 @@ export default async function handler(request: Request): Promise<Response> {
   }
   if (link.kind !== 'wishlist') return json({ ok: false, reason: 'unsupported' }, 400);
 
-  let outcome: LoadOutcome = { kind: 'blocked' };
-  for (let attempt = 0; attempt < CAPTCHA_ATTEMPTS && outcome.kind === 'blocked'; attempt++) {
-    outcome = await loadList(link.canonicalUrl, link.marketplace);
-  }
+  const outcome = await loadList(link);
   if (outcome.kind !== 'list')
     return json({ ok: false, reason: outcome.kind }, STATUS[outcome.kind]);
-  const { title, url, marketplace: resolved, items } = outcome;
-  return json({ ok: true, list: { title, url, marketplace: resolved, items } });
+  return json({ ok: true, list: outcome.list });
 }
 
 export const config = { path: '/api/wishlist' };

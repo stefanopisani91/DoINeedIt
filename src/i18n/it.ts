@@ -259,7 +259,8 @@ export const it = {
     loading: 'Leggo la lista…',
     found: (n: number, list: string | null) =>
       `${n === 1 ? 'Un prodotto' : `${n} prodotti`}${list ? ` nella lista «${list}»` : ' nella lista'}.`,
-    partial: 'Amazon mostra solo i primi prodotti di una lista: gli altri vanno aggiunti a mano.',
+    partial:
+      'Amazon ha interrotto la lettura prima della fine: gli altri prodotti della lista vanno aggiunti a mano.',
     products: 'Prodotti della lista',
     selectAll: 'Seleziona tutti',
     deselectAll: 'Deseleziona tutti',

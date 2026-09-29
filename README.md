@@ -25,7 +25,7 @@ I link di negozi diversi da Amazon passano da un parser generico: titolo da `og:
 
 ### Liste dei desideri
 
-Incollando il link di una **lista dei desideri Amazon pubblica** (o un link breve che porta a una lista), la funzione edge ne legge i prodotti visibili, con titolo, foto, prezzo e link, e li propone in una pagina con una casella per ciascuno. Scelgo quali aggiungere: finiscono nella sezione "Da valutare" della home, come bozze, e ognuno passa dal questionario completo, uno alla volta. Nessuna valutazione automatica. È un import best effort: Amazon mostra nella pagina solo i primi prodotti di una lista, blocca ogni tanto le letture automatiche e non espone le liste private; in tutti questi casi l'app lo dice e non succede altro.
+Incollando il link di una **lista dei desideri Amazon pubblica** (o un link breve che porta a una lista), la funzione edge ne legge i prodotti, con titolo, foto, prezzo e link, e li propone in una pagina con una casella per ciascuno. Amazon mette dieci prodotti per pagina e carica gli altri con una richiesta "mostra altri": la funzione segue quella catena fino alla fine della lista, entro un budget di tempo, e dice se si è fermata prima. Scelgo quali aggiungere: finiscono nella sezione "Da valutare" della home, come bozze, e ognuno passa dal questionario completo, uno alla volta. Nessuna valutazione automatica. È un import best effort: Amazon blocca ogni tanto le letture automatiche, anche a metà lista, e non espone le liste private; in tutti questi casi l'app lo dice e non succede altro. Le voci "idea" senza un prodotto vengono saltate.
 
 ### Il motore decisionale
 
@@ -94,7 +94,7 @@ Comandi, architettura e convenzioni sono in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 - Amazon non offre un'API pubblica gratuita e a volte risponde alle richieste automatiche con una pagina di verifica. In quel caso l'app lo dice e passa all'inserimento manuale. Non memorizzo nulla di ciò che leggo.
 - Per i negozi diversi da Amazon la lettura dipende dai meta tag della pagina: se il negozio non li espone (o li riempie solo via script), l'app propone l'inserimento manuale. Il prezzo arriva solo quando la pagina lo dichiara nei meta tag o nei dati strutturati.
-- L'import di una lista dei desideri legge solo i prodotti che Amazon mette nella pagina (in genere i primi dieci o venti), solo dalle liste pubbliche, e smette di funzionare se Amazon cambia il markup delle liste. Le liste vengono lette al momento: non c'è sincronizzazione.
+- L'import di una lista dei desideri segue le pagine "mostra altri" di Amazon fino a 50 pagine (500 prodotti) o 25 secondi, solo dalle liste pubbliche, e smette di funzionare se Amazon cambia il markup delle liste. Se Amazon blocca una pagina a metà, l'app propone i prodotti letti fino a lì e lo dice. Le liste vengono lette al momento: non c'è sincronizzazione.
 - Le funzioni edge controllano il nome dell'host, non l'indirizzo IP risolto: non contattano mai indirizzi letterali, locali o porte non standard, ma un DNS pubblico che punta a un indirizzo privato non è rilevabile dall'edge.
 - Se un testo condiviso contiene più link, conta il primo.
 - I dati sono legati al browser: cambiando dispositivo bisogna esportare e importare il file. La coda "da valutare", il budget e la lingua non entrano nel file.

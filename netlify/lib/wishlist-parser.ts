@@ -20,11 +20,40 @@ export interface WishlistItem {
 export interface ParsedWishlist {
   title: string | null;
   items: WishlistItem[];
+  /**
+   * Where the next batch of items is: Amazon renders ten per page and loads
+   * the rest through this url ("show more"). Relative to the list page; null
+   * on the last page.
+   */
+  nextPageUrl: string | null;
 }
 
 export type WishlistOutcome =
   | { ok: true; list: ParsedWishlist }
-  | { ok: false; reason: 'blocked' | 'not-found' | 'private' | 'unparsable' };
+  | { ok: false; reason: 'blocked' | 'not-found' | 'private' | 'unparsable' | 'empty' };
+
+/** The currency a marketplace prints its prices in, for the `data-price` fallback. */
+const MARKETPLACE_CURRENCY: Record<string, string> = {
+  com: 'USD',
+  ca: 'CAD',
+  'com.mx': 'MXN',
+  'com.br': 'BRL',
+  'co.uk': 'GBP',
+  'co.jp': 'JPY',
+  in: 'INR',
+  'com.au': 'AUD',
+  sg: 'SGD',
+  ae: 'AED',
+  sa: 'SAR',
+  se: 'SEK',
+  pl: 'PLN',
+  'com.tr': 'TRY',
+  eg: 'EGP',
+};
+
+export function marketplaceCurrency(marketplace: string): string {
+  return MARKETPLACE_CURRENCY[marketplace.toLowerCase()] ?? 'EUR';
+}
 
 const BLOCKED_MARKERS = [
   /id="captchacharacters"/i,
@@ -120,13 +149,36 @@ function parseItem(block: string, marketplace: string): WishlistItem | null {
   if (!price) {
     const attributePrice = /\bdata-price\s*=\s*["']([\d.,]+)["']/i.exec(block)?.[1];
     if (attributePrice && Number(attributePrice) > 0) {
-      price = { amount: Math.round(Number(attributePrice) * 100) / 100, currency: 'EUR' };
+      price = {
+        amount: Math.round(Number(attributePrice) * 100) / 100,
+        currency: marketplaceCurrency(marketplace),
+      };
     }
   }
 
   return { asin, title, imageUrl, price, url: `https://www.amazon.${marketplace}/dp/${asin}` };
 }
 
+/** The "show more" url of a list page or fragment, when it has one and is not the last. */
+export function findNextPageUrl(html: string): string | null {
+  if (/\bid\s*=\s*["']endOfListMarker["']/i.test(html)) return null;
+  const input =
+    /<input\b[^>]*\b(?:id|name)\s*=\s*["']showMoreUrl["'][^>]*\bvalue\s*=\s*["']([^"']+)["']/i.exec(
+      html,
+    ) ??
+    /<input\b[^>]*\bvalue\s*=\s*["']([^"']+)["'][^>]*\b(?:id|name)\s*=\s*["']showMoreUrl["']/i.exec(
+      html,
+    ) ??
+    /"showMoreUrl"\s*:\s*"([^"]+)"/.exec(html);
+  const url = input?.[1] ? decodeEntities(input[1]).replace(/\\\//g, '/').trim() : null;
+  return url && /^(https?:\/\/|\/)/.test(url) ? url : null;
+}
+
+/**
+ * Parses a list page, or one of the fragments Amazon serves for "show more".
+ * `empty` is a readable page without products, which on a later page just
+ * means the list has ended.
+ */
 export function parseWishlistHtml(html: string, marketplace: string): WishlistOutcome {
   if (BLOCKED_MARKERS.some((marker) => marker.test(html))) return { ok: false, reason: 'blocked' };
   if (NOT_FOUND_MARKERS.some((marker) => marker.test(html)))
@@ -134,7 +186,8 @@ export function parseWishlistHtml(html: string, marketplace: string): WishlistOu
 
   const seen = new Set<string>();
   const items: WishlistItem[] = [];
-  for (const block of itemBlocks(html)) {
+  const blocks = itemBlocks(html);
+  for (const block of blocks) {
     const item = parseItem(block, marketplace);
     if (item && !seen.has(item.asin)) {
       seen.add(item.asin);
@@ -144,7 +197,14 @@ export function parseWishlistHtml(html: string, marketplace: string): WishlistOu
   if (items.length === 0) {
     if (PRIVATE_MARKERS.some((marker) => marker.test(html)))
       return { ok: false, reason: 'private' };
+    // Entries without a product (an "idea") or a list container without entries.
+    if (blocks.length > 0 || /\bid\s*=\s*["']g-items["']/i.test(html)) {
+      return { ok: false, reason: 'empty' };
+    }
     return { ok: false, reason: 'unparsable' };
   }
-  return { ok: true, list: { title: findListTitle(html), items } };
+  return {
+    ok: true,
+    list: { title: findListTitle(html), items, nextPageUrl: findNextPageUrl(html) },
+  };
 }

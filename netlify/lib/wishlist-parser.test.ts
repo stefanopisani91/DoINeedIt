@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseWishlistHtml } from './wishlist-parser';
+import { findNextPageUrl, marketplaceCurrency, parseWishlistHtml } from './wishlist-parser';
 
 export const WISHLIST_PAGE = `<!doctype html><html><head>
 <title>Amazon.it: Regali di Natale</title></head><body>
@@ -27,6 +27,21 @@ export const WISHLIST_PAGE = `<!doctype html><html><head>
   <span>Articolo non più disponibile, senza link</span>
 </li>
 </ul></body></html>`;
+
+/** What Amazon serves for the "show more" url: a fragment with the next ten entries. */
+export const WISHLIST_FRAGMENT = `<ul id="g-items" class="a-unordered-list g-items-section"><li class="a-spacing-none"><span class="a-list-item"><input type="hidden" name="" value="10" id="viewItemCount"/></span></li>
+<li data-id="3GAI165J8DP6Y" data-itemId="I1AVW0H3HUK7XB" data-price="25.6" class="a-spacing-none g-item-sortable">
+  <a class="a-link-normal" id="itemImage_I1AVW0H3HUK7XB" href="/dp/B01KXSELDK/?coliid=I1AVW0H3HUK7XB&amp;colid=3GAI165J8DP6Y&amp;psc=1"><img alt="Dog treats" src="https://m.media-amazon.com/images/I/treats._SS135_.jpg"></a>
+  <a class="a-link-normal" id="itemName_I1AVW0H3HUK7XB" title="Dog treats" href="/dp/B01KXSELDK/?coliid=I1AVW0H3HUK7XB&amp;colid=3GAI165J8DP6Y&amp;psc=1">Dog treats</a>
+  <span id="itemPrice_I1AVW0H3HUK7XB" class="a-price"><span class="a-offscreen">$25.60</span></span>
+</li>
+<li data-id="3GAI165J8DP6Y" data-itemId="I25KTK21DHXD35" data-price="10.35" class="a-spacing-none g-item-sortable">
+  <a class="a-link-normal" id="itemName_I25KTK21DHXD35" title="Chew toy" href="/dp/B0787KPCPX/?coliid=I25KTK21DHXD35&amp;colid=3GAI165J8DP6Y">Chew toy</a>
+</li>
+<li class="a-spacing-none"><span class="a-list-item">
+  <input type="hidden" name="showMoreUrl" value="/hz/wishlist/slv/items?filter=persistent_all&amp;paginationToken=PAGE3" class="showMoreUrl" id="showMoreUrl"/>
+  <input type="hidden" name="lastEvaluatedKey" value="PAGE3" id="lastEvaluatedKey"/>
+</span></li></ul>`;
 
 describe('parseWishlistHtml', () => {
   it('reads title, image, price and link of every visible product', () => {
@@ -58,8 +73,70 @@ describe('parseWishlistHtml', () => {
             url: 'https://www.amazon.it/dp/B0EXAMPLE9',
           },
         ],
+        nextPageUrl: null,
       },
     });
+  });
+
+  it('finds the "show more" url of a page and of a fragment, in every form Amazon writes it', () => {
+    expect(
+      findNextPageUrl(
+        `<input type="hidden" name="showMoreUrl" value="/hz/wishlist/slv/items?filter=persistent_all&amp;paginationToken=ABC" id="showMoreUrl"/>`,
+      ),
+    ).toBe('/hz/wishlist/slv/items?filter=persistent_all&paginationToken=ABC');
+    expect(findNextPageUrl(`<input value="/hz/wishlist/slv/items?lek=X" name="showMoreUrl">`)).toBe(
+      '/hz/wishlist/slv/items?lek=X',
+    );
+    expect(
+      findNextPageUrl(`<script>{"showMoreUrl":"\\/hz\\/wishlist\\/slv\\/items?lek=Y"}</script>`),
+    ).toBe('/hz/wishlist/slv/items?lek=Y');
+    expect(
+      findNextPageUrl(
+        `<div id="endOfListMarker"></div><input name="showMoreUrl" value="/hz/wishlist/slv/items?lek=Z">`,
+      ),
+    ).toBeNull();
+    expect(findNextPageUrl(`<input name="showMoreUrl" value="javascript:void(0)">`)).toBeNull();
+    expect(findNextPageUrl('<ul id="g-items"></ul>')).toBeNull();
+  });
+
+  it('reads a "show more" fragment like a page and tells an empty fragment from garbage', () => {
+    expect(parseWishlistHtml(WISHLIST_FRAGMENT, 'com')).toEqual({
+      ok: true,
+      list: {
+        title: null,
+        items: [
+          {
+            asin: 'B01KXSELDK',
+            title: 'Dog treats',
+            imageUrl: 'https://m.media-amazon.com/images/I/treats._SS135_.jpg',
+            price: { amount: 25.6, currency: 'USD' },
+            url: 'https://www.amazon.com/dp/B01KXSELDK',
+          },
+          {
+            asin: 'B0787KPCPX',
+            title: 'Chew toy',
+            imageUrl: null,
+            price: { amount: 10.35, currency: 'USD' },
+            url: 'https://www.amazon.com/dp/B0787KPCPX',
+          },
+        ],
+        nextPageUrl: '/hz/wishlist/slv/items?filter=persistent_all&paginationToken=PAGE3',
+      },
+    });
+    // An "idea" without a product is an entry without a link: readable, but nothing to import.
+    const ideaOnly = `<ul id="g-items"><li data-itemid="I1"><span>Added as an idea</span></li></ul>`;
+    expect(parseWishlistHtml(ideaOnly, 'com')).toEqual({ ok: false, reason: 'empty' });
+    expect(parseWishlistHtml('<ul id="g-items"></ul>', 'com')).toEqual({
+      ok: false,
+      reason: 'empty',
+    });
+  });
+
+  it('uses the marketplace currency when only data-price is available', () => {
+    expect(marketplaceCurrency('com')).toBe('USD');
+    expect(marketplaceCurrency('co.uk')).toBe('GBP');
+    expect(marketplaceCurrency('it')).toBe('EUR');
+    expect(marketplaceCurrency('de')).toBe('EUR');
   });
 
   it('skips duplicates and falls back to the page title for the list name', () => {

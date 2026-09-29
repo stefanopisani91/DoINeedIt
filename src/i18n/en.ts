@@ -239,7 +239,8 @@ export const en: Copy = {
     loading: 'Reading the list…',
     found: (n: number, list: string | null) =>
       `${n === 1 ? 'One product' : `${n} products`}${list ? ` in the list “${list}”` : ' in the list'}.`,
-    partial: 'Amazon shows only the first products of a list: the others must be added by hand.',
+    partial:
+      'Amazon stopped the reading before the end: the other products of the list must be added by hand.',
     products: 'Products in the list',
     selectAll: 'Select all',
     deselectAll: 'Deselect all',
