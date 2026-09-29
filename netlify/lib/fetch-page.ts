@@ -90,8 +90,35 @@ export function findClientRedirect(html: string): string | null {
   return target?.replace(/&amp;/g, '&') ?? null;
 }
 
+/** The `Set-Cookie` headers of a response, where the runtime exposes them. */
+export function setCookies(headers: Headers): string[] {
+  const withGetter = headers as Headers & { getSetCookie?: () => string[] };
+  if (typeof withGetter.getSetCookie === 'function') return withGetter.getSetCookie();
+  const single = headers.get('set-cookie');
+  return single ? [single] : [];
+}
+
+/** Turns `Set-Cookie` values into a `Cookie` header value, latest value of a name winning. */
+export function cookieHeader(jar: Map<string, string>, setCookies: string[]): string {
+  for (const raw of setCookies) {
+    const pair = raw.split(';', 1)[0] ?? '';
+    const eq = pair.indexOf('=');
+    if (eq <= 0) continue;
+    jar.set(pair.slice(0, eq).trim(), pair.slice(eq + 1).trim());
+  }
+  return [...jar.entries()].map(([name, value]) => `${name}=${value}`).join('; ');
+}
+
 export type FetchedPage =
-  | { kind: 'page'; url: string; status: number; contentType: string; html: string }
+  | {
+      kind: 'page';
+      url: string;
+      status: number;
+      contentType: string;
+      html: string;
+      /** The `Set-Cookie` values of the page response, for callers that keep a session across pages. */
+      cookies: string[];
+    }
   /** A redirect target that `stopAt` accepted: not fetched. */
   | { kind: 'resolved'; url: string }
   | { kind: 'unsupported' | 'unreachable' };
@@ -104,6 +131,8 @@ export interface FetchOptions {
   followClientRedirects?: (url: URL) => boolean;
   /** Stop before fetching a redirect target that passes this test and return it as `resolved`. */
   stopAt?: (url: URL) => boolean;
+  /** Extra request headers, e.g. the cookies and referer of a page read just before. */
+  headers?: Record<string, string>;
 }
 
 /** Fetches a page following at most MAX_REDIRECTS redirects, each one checked with `allow`. */
@@ -118,7 +147,7 @@ export async function fetchPage(startUrl: string, options: FetchOptions): Promis
     if (!isPublicUrl(current) || !options.allow(current)) return { kind: 'unsupported' };
     if (hop > 0 && options.stopAt?.(current)) return { kind: 'resolved', url: current.toString() };
     const response = await fetch(current, {
-      headers: browserHeaders(options.acceptLanguage),
+      headers: { ...browserHeaders(options.acceptLanguage), ...options.headers },
       redirect: 'manual',
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
@@ -138,7 +167,14 @@ export async function fetchPage(startUrl: string, options: FetchOptions): Promis
         continue;
       }
     }
-    return { kind: 'page', url: current.toString(), status: response.status, contentType, html };
+    return {
+      kind: 'page',
+      url: current.toString(),
+      status: response.status,
+      contentType,
+      html,
+      cookies: setCookies(response.headers),
+    };
   }
   return { kind: 'unreachable' };
 }

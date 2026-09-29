@@ -191,7 +191,28 @@ describe('wishlist function', () => {
       const { status, body } = await call('https://www.amazon.it/hz/wishlist/ls/2ABCDEF12345');
       expect(status).toBe(200);
       expect(body.list.items).toHaveLength(3);
-      expect(body.list.complete).toBe(false);
+      expect(body.list).toMatchObject({ complete: false, stoppedBy: 'blocked' });
+    });
+
+    it('sends the session cookies and the referer of the list page with every next page', async () => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(
+          htmlResponse(withMore(WISHLIST_PAGE, 'PAGE2'), 200, {
+            'set-cookie': 'session-id=abc123; Path=/; Secure',
+          }),
+        )
+        .mockResolvedValueOnce(htmlResponse(WISHLIST_FRAGMENT))
+        .mockResolvedValueOnce(htmlResponse('<ul id="g-items"></ul>'));
+      vi.stubGlobal('fetch', fetchMock);
+      const { body } = await call('https://www.amazon.it/hz/wishlist/ls/2ABCDEF12345');
+      expect(body.list.complete).toBe(true);
+      const [, init] = fetchMock.mock.calls[1] as unknown as [URL, RequestInit];
+      const headers = init.headers as Record<string, string>;
+      expect(headers['cookie']).toBe('session-id=abc123');
+      expect(headers['referer']).toBe('https://www.amazon.it/hz/wishlist/ls/2ABCDEF12345');
+      const [, firstInit] = fetchMock.mock.calls[0] as unknown as [URL, RequestInit];
+      expect((firstInit.headers as Record<string, string>)['cookie']).toBeUndefined();
     });
   });
 });

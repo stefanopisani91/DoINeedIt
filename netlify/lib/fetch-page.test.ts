@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fetchPage, findClientRedirect, isPublicUrl } from './fetch-page';
+import { cookieHeader, fetchPage, findClientRedirect, isPublicUrl } from './fetch-page';
 
 describe('isPublicUrl', () => {
   it('accepts public http(s) hosts on the default port', () => {
@@ -133,5 +133,30 @@ describe('fetchPage', () => {
     ).toEqual({
       kind: 'unreachable',
     });
+  });
+
+  it('reports the cookies a page sets and sends extra headers', async () => {
+    const fetchMock = vi.fn(async () =>
+      html('<title>ok</title>', 200, { 'set-cookie': 'session-id=1; Path=/' }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const page = await fetchPage('https://shop.example/', {
+      allow: () => true,
+      acceptLanguage: 'it',
+      headers: { cookie: 'a=b', referer: 'https://shop.example/list' },
+    });
+    expect(page).toMatchObject({ kind: 'page', cookies: ['session-id=1; Path=/'] });
+    const [, init] = fetchMock.mock.calls[0] as unknown as [URL, RequestInit];
+    expect(init.headers).toMatchObject({ cookie: 'a=b', referer: 'https://shop.example/list' });
+  });
+});
+
+describe('cookieHeader', () => {
+  it('keeps one value per cookie name, the latest winning, and ignores attributes', () => {
+    const jar = new Map<string, string>();
+    expect(cookieHeader(jar, ['session-id=1; Path=/; Secure', 'ubid=x; HttpOnly'])).toBe(
+      'session-id=1; ubid=x',
+    );
+    expect(cookieHeader(jar, ['session-id=2', 'broken', '=novalue'])).toBe('session-id=2; ubid=x');
   });
 });

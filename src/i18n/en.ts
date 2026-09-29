@@ -239,8 +239,12 @@ export const en: Copy = {
     loading: 'Reading the list…',
     found: (n: number, list: string | null) =>
       `${n === 1 ? 'One product' : `${n} products`}${list ? ` in the list “${list}”` : ' in the list'}.`,
-    partial:
-      'Amazon stopped the reading before the end: the other products of the list must be added by hand.',
+    partial: {
+      blocked:
+        'Amazon stopped the reading before the end: the other products of the list must be added by hand, or try again shortly.',
+      limit:
+        'The list is longer than I can read in one go: the other products must be added by hand.',
+    },
     products: 'Products in the list',
     selectAll: 'Select all',
     deselectAll: 'Deselect all',
