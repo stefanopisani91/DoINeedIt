@@ -2,7 +2,7 @@
 
 Come lavoro su questo repository. Il [README](README.md) spiega il prodotto e il motore decisionale; qui ci sono comandi, architettura, convenzioni e roadmap. Da leggere per intero prima di toccare il codice.
 
-**Stato:** versione 2.0 in sviluppo (`package.json` a `2.0.0-rc.1`). La sessione 1.5 (interfaccia e funzionalità) è conclusa con `npm run check` ed e2e verdi; la sessione 2.0 farà correzione dei difetti, test e pubblicazione, dopo la quale il commit pubblicato riceve il tag `v2.0.0`. Il sito pubblicato è ancora la 1.2.0 (tag `v1.2.0`).
+**Stato:** versione 2.0 in sviluppo (`package.json` a `2.0.0-rc.1`). La sessione 1.5 (interfaccia e funzionalità) è conclusa con `npm run check` ed e2e verdi ed è pubblicata su Netlify come release candidate (tag `v2.0.0-rc.1`); la sessione 2.0 farà correzione dei difetti e test, dopo la quale il commit pubblicato riceve il tag `v2.0.0`.
 
 ## Comandi
 

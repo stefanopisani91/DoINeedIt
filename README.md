@@ -2,7 +2,7 @@
 
 Un'app web che mi aiuta a non comprare cose inutili. Incollo il link di un prodotto, rispondo a poche domande sincere (sì, no, forse) e ottengo un punteggio da 0 a 100 che dice quanto mi serve davvero quell'acquisto. Ogni prodotto valutato resta salvato con foto, prezzo e verdetto; dopo posso segnare cosa ho fatto davvero (comprato o no) e la pagina **Insight** mi dice quanti impulsi ho fermato e quanti soldi non ho speso.
 
-**Versione:** 2.0.0-rc.1 in sviluppo (la 2.0 arriva in due sessioni: interfaccia e funzionalità, poi correzioni e test; il sito pubblicato è ancora la 1.2.0).
+**Versione:** 2.0.0-rc.1, pubblicata il 29 settembre 2026 (la 2.0 arriva in due sessioni: interfaccia e funzionalità, poi correzioni e test; la 2.0.0 definitiva chiude la seconda).
 
 **Demo:** https://do-i-need-it-now.netlify.app
 
@@ -125,7 +125,7 @@ La 1.2.0 aveva chiuso la roadmap iniziale; la 2.0 rende l'app più completa e pi
 - [x] Import di una lista dei desideri pubblica.
 - [x] Interfaccia in inglese.
 - [x] **2.0, sessione 1.5**: design system e nuova grafica (token, Manrope, componenti base, navigazione a quattro voci), tema chiaro/scuro/sistema, esito della decisione, attesa di trenta giorni, storico delle rivalutazioni, libreria con ricerca, filtri e riepilogo, pagina Insight con grafici, impostazioni ristrutturate, export CSV, invito all'installazione, scorciatoie nel manifest, primo avvio.
-- [ ] **2.0, sessione 2.0**: correzione dei difetti, test, pubblicazione su Netlify e tag `v2.0.0`.
+- [ ] **2.0, sessione 2.0**: correzione dei difetti, test, pubblicazione definitiva su Netlify e tag `v2.0.0`.
 
 ## Licenza
 
