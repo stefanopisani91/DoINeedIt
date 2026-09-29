@@ -1,3 +1,5 @@
+/** @vitest-environment jsdom */
+
 import { beforeEach, describe, expect, it } from 'vitest';
 import { migrateItems, useItemsStore, STORAGE_KEY } from './store';
 import { SETTINGS_KEY, useSettingsStore } from './settings';
