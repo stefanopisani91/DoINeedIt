@@ -1,26 +1,98 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useCopy } from '@/i18n';
+import { coolingOff } from '@/insights/lifecycle';
+import { formatDate } from '@/lib/format';
 import { shareUrl } from '@/lib/share';
 import { useDraftStore } from '@/storage/draft';
 import { useSettingsStore } from '@/storage/settings';
 import { selectItem, useItemsStore } from '@/storage/store';
-import { Button, ButtonLink } from '../components/Button';
-import { buttonClass } from '../components/button-styles';
+import type { Item } from '@/storage/types';
+import { Button, ButtonAnchor, ButtonLink } from '../components/Button';
+import { ConfirmDialog } from '../components/ConfirmDialog';
+import { DecisionCard } from '../components/DecisionCard';
+import { Field, Textarea } from '../components/Field';
+import { controlClass } from '../components/field-styles';
+import { HistoryList } from '../components/HistoryList';
+import { Icon } from '../components/Icon';
 import { Notice } from '../components/Notice';
 import { ResultView } from '../components/ResultView';
+import { Surface } from '../components/Surface';
+import { verdictStyle } from '../verdict';
+
+/** How long a transient confirmation ("copied", "saved") stays on. */
+const FEEDBACK_MS = 2000;
+
+/** A flag that switches itself off after `ms`; the timer dies with the component. */
+function useTransientFlag(ms: number): [boolean, () => void] {
+  const [active, setActive] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+    },
+    [],
+  );
+  const trigger = useCallback(() => {
+    setActive(true);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => setActive(false), ms);
+  }, [ms]);
+  return [active, trigger];
+}
+
+/** Where a "wait" verdict stands in its cooling-off period; nothing for the other verdicts. */
+function CoolingOffNotice({ item, now }: { item: Item; now: Date }) {
+  const copy = useCopy();
+  const cooling = coolingOff(item, now);
+  if (cooling.state === 'none' || cooling.reconsiderAt === null) return null;
+  if (cooling.state === 'ready') {
+    return (
+      <Notice tone="warning">
+        <span className="flex items-start gap-2">
+          <Icon name="clock" size={16} className="mt-0.5" />
+          <span>{copy.coolingOff.expired}</span>
+        </span>
+      </Notice>
+    );
+  }
+  // The sentence comes whole from the copy; the date inside it becomes a <time>.
+  const date = formatDate(cooling.reconsiderAt, copy.locale);
+  const sentence = copy.coolingOff.until(date, cooling.daysLeft);
+  const [before = '', after = ''] = date ? sentence.split(date) : [sentence];
+  return (
+    <Notice tone="info">
+      <span className="flex items-start gap-2">
+        <Icon name="clock" size={16} className="mt-0.5" />
+        <span>
+          {before}
+          {date && (
+            <time dateTime={cooling.reconsiderAt} className="font-semibold">
+              {date}
+            </time>
+          )}
+          {after}
+        </span>
+      </span>
+    </Notice>
+  );
+}
 
 export function ItemDetailPage() {
   const copy = useCopy();
   const { id } = useParams();
   const navigate = useNavigate();
   const item = useItemsStore(selectItem(id));
-  const upsert = useItemsStore((state) => state.upsert);
+  const setNote = useItemsStore((state) => state.setNote);
   const remove = useItemsStore((state) => state.remove);
   const setDraft = useDraftStore((state) => state.setDraft);
   const budget = useSettingsStore((state) => state.budget);
-  const [copied, setCopied] = useState(false);
-  const [note, setNote] = useState(item?.note ?? '');
+  const [now] = useState(() => new Date());
+  const [copied, flagCopied] = useTransientFlag(FEEDBACK_MS);
+  const [noteSaved, flagNoteSaved] = useTransientFlag(FEEDBACK_MS);
+  const [fallbackUrl, setFallbackUrl] = useState<string | null>(null);
+  const [note, setNoteText] = useState(item?.note ?? '');
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   if (!item) {
     return (
@@ -31,15 +103,29 @@ export function ItemDetailPage() {
     );
   }
 
+  const style = verdictStyle(item.result.verdict, copy);
+  const canShareNatively = typeof navigator.share === 'function';
+
   const copyLink = async () => {
     const url = shareUrl(item);
     try {
       await navigator.clipboard.writeText(url);
+      setFallbackUrl(null);
+      flagCopied();
     } catch {
-      window.prompt(copy.result.actions.share, url);
+      // No clipboard access: the link is offered in a field, already selected.
+      setFallbackUrl(url);
     }
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const shareNative = async () => {
+    try {
+      await navigator.share({ title: item.title, text: style.label, url: shareUrl(item) });
+    } catch (error) {
+      // Closing the share sheet is not an error; anything else falls back to copying.
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      await copyLink();
+    }
   };
 
   const reevaluate = () => {
@@ -58,14 +144,12 @@ export function ItemDetailPage() {
   const saveNote = () => {
     const trimmed = note.trim();
     if ((item.note ?? '') === trimmed) return;
-    const next = { ...item, updatedAt: new Date().toISOString() };
-    if (trimmed) next.note = trimmed;
-    else delete next.note;
-    upsert(next);
+    setNote(item.id, trimmed);
+    flagNoteSaved();
   };
 
   const onDelete = () => {
-    if (!window.confirm(copy.result.actions.deleteConfirm)) return;
+    setConfirmingDelete(false);
     remove(item.id);
     navigate('/', { replace: true });
   };
@@ -83,47 +167,76 @@ export function ItemDetailPage() {
 
   return (
     <div className="space-y-6">
+      <CoolingOffNotice item={item} now={now} />
       {budgetNotice}
       <ResultView item={item} />
+      <DecisionCard key={item.id} item={item} />
+      {item.history && item.history.length > 0 && <HistoryList history={item.history} />}
 
-      <section className="rounded-3xl bg-white p-6 ring-1 ring-stone-200 dark:bg-stone-900 dark:ring-stone-800">
-        <label
-          htmlFor="note"
-          className="mb-2 block text-sm font-semibold uppercase tracking-wide text-stone-500 dark:text-stone-400"
-        >
-          {copy.result.noteLabel}
-        </label>
-        <textarea
-          id="note"
-          rows={2}
-          maxLength={2000}
-          value={note}
-          onChange={(event) => setNote(event.target.value)}
-          onBlur={saveNote}
-          placeholder={copy.result.notePlaceholder}
-          className="w-full rounded-xl border border-stone-300 bg-white px-3 py-2 text-base placeholder:text-stone-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 dark:border-stone-700 dark:bg-stone-950"
-        />
-      </section>
+      <Surface>
+        <Field id="note" label={copy.result.noteLabel}>
+          <Textarea
+            id="note"
+            rows={2}
+            maxLength={2000}
+            value={note}
+            onChange={(event) => setNoteText(event.target.value)}
+            onBlur={saveNote}
+            placeholder={copy.result.notePlaceholder}
+          />
+        </Field>
+        <p role="status" className="sr-only">
+          {noteSaved ? copy.result.noteSaved : ''}
+        </p>
+      </Surface>
 
-      <div className="flex flex-wrap gap-3">
-        <Button onClick={reevaluate}>{copy.result.actions.reevaluate}</Button>
-        <Button variant="secondary" onClick={copyLink} aria-live="polite">
+      <Surface as="div" className="flex flex-wrap gap-3">
+        <Button onClick={reevaluate} leadingIcon="refresh">
+          {copy.result.actions.reevaluate}
+        </Button>
+        {canShareNatively && (
+          <Button variant="secondary" leadingIcon="share" onClick={shareNative}>
+            {copy.result.actions.shareNative}
+          </Button>
+        )}
+        <Button variant="secondary" leadingIcon="copy" onClick={copyLink} aria-live="polite">
           {copied ? copy.result.actions.shared : copy.result.actions.share}
         </Button>
         {item.source.url && (
-          <a
-            href={item.source.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className={buttonClass('secondary')}
-          >
-            {copy.result.actions.open} ↗
-          </a>
+          <ButtonAnchor variant="secondary" href={item.source.url}>
+            {copy.result.actions.open}
+          </ButtonAnchor>
         )}
-        <Button variant="danger" onClick={onDelete} className="ml-auto">
+        <Button
+          variant="danger"
+          leadingIcon="trash"
+          className="ml-auto"
+          onClick={() => setConfirmingDelete(true)}
+        >
           {copy.result.actions.delete}
         </Button>
-      </div>
+        {fallbackUrl && (
+          <input
+            readOnly
+            value={fallbackUrl}
+            aria-label={copy.result.actions.share}
+            className={`${controlClass} basis-full text-sm`}
+            ref={(input) => input?.select()}
+            onFocus={(event) => event.currentTarget.select()}
+          />
+        )}
+      </Surface>
+
+      <ConfirmDialog
+        open={confirmingDelete}
+        title={copy.result.actions.deleteTitle}
+        body={copy.result.actions.deleteConfirm}
+        confirmLabel={copy.result.actions.deleteYes}
+        cancelLabel={copy.result.actions.deleteNo}
+        tone="danger"
+        onConfirm={onDelete}
+        onCancel={() => setConfirmingDelete(false)}
+      />
     </div>
   );
 }

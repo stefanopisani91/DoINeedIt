@@ -10,11 +10,18 @@ import { useDraftStore } from '@/storage/draft';
 import { selectQueued, useQueueStore, type QueuedProduct } from '@/storage/queue';
 import type { Draft } from '@/storage/types';
 import { Button, ButtonLink } from '../components/Button';
+import { Field, Input } from '../components/Field';
+import { describedBy } from '../components/field-styles';
 import { Notice } from '../components/Notice';
 import { ProductImage } from '../components/ProductImage';
+import { PreviewSkeleton } from '../components/Skeleton';
+import { Surface } from '../components/Surface';
 import { useCategories } from '../hooks';
 
 type Status = { kind: 'idle' } | { kind: 'loading' } | { kind: 'done'; outcome: PreviewOutcome };
+
+/** After this long the notice admits the shop is slow and points to the manual way. */
+const SLOW_AFTER_MS = 8_000;
 
 interface FormState {
   title: string;
@@ -76,19 +83,28 @@ function NewItemForm({
   const removeQueued = useQueueStore((state) => state.remove);
   const decimalSeparator = copy.lang === 'it' ? ',' : '.';
 
-  const [status, setStatus] = useState<Status>(canPreview ? { kind: 'loading' } : { kind: 'idle' });
+  const [status, setStatus] = useState<Status>(() => {
+    if (!canPreview) return { kind: 'idle' };
+    // Offline there is nothing to wait for: straight to the manual form.
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      return { kind: 'done', outcome: { ok: false, reason: 'network' } };
+    }
+    return { kind: 'loading' };
+  });
+  const [slow, setSlow] = useState(false);
   const [form, setForm] = useState<FormState>({
     title: queued?.title ?? initialTitle,
     price: queued?.price ? priceInput(queued.price.amount, decimalSeparator) : '',
     imageUrl: queued?.imageUrl ?? '',
     category: 'other',
   });
-  const [attempt, setAttempt] = useState(0);
   const [titleError, setTitleError] = useState(false);
+  const [priceError, setPriceError] = useState(false);
 
   useEffect(() => {
-    if (!canPreview) return;
+    if (!canPreview || status.kind !== 'loading') return;
     const controller = new AbortController();
+    const slowTimer = window.setTimeout(() => setSlow(true), SLOW_AFTER_MS);
     fetchPreview(url, controller.signal).then((outcome) => {
       if (controller.signal.aborted) return;
       setStatus({ kind: 'done', outcome });
@@ -103,8 +119,11 @@ function NewItemForm({
         }));
       }
     });
-    return () => controller.abort();
-  }, [url, canPreview, attempt, decimalSeparator]);
+    return () => {
+      controller.abort();
+      window.clearTimeout(slowTimer);
+    };
+  }, [url, canPreview, decimalSeparator, status.kind]);
 
   const previewCurrency =
     status.kind === 'done' && status.outcome.ok
@@ -119,6 +138,10 @@ function NewItemForm({
       return;
     }
     const amount = parsePriceInput(form.price);
+    if (form.price.trim() && amount === null) {
+      setPriceError(true);
+      return;
+    }
     const resolved = status.kind === 'done' && status.outcome.ok ? status.outcome.product : null;
     const source = queued
       ? queued.source
@@ -149,9 +172,30 @@ function NewItemForm({
     navigate('/evaluate');
   };
 
+  const loading = status.kind === 'loading';
+  const retry = () => {
+    setSlow(false);
+    setStatus({ kind: 'loading' });
+  };
+  const skipPreview = () => setStatus({ kind: 'idle' });
+
   const notice = (() => {
     if (queued) return <Notice tone="info">{copy.newItem.fromQueue}</Notice>;
-    if (status.kind === 'loading') return <Notice tone="info">{copy.newItem.loading}</Notice>;
+    if (loading) {
+      return (
+        <Notice
+          tone="info"
+          icon="spinner"
+          action={
+            <Button variant="ghost" size="sm" onClick={skipPreview}>
+              {copy.newItem.skipPreview}
+            </Button>
+          }
+        >
+          {slow ? copy.newItem.slow : copy.newItem.loading}
+        </Notice>
+      );
+    }
     if (status.kind === 'done') {
       const { outcome } = status;
       if (outcome.ok) {
@@ -170,160 +214,138 @@ function NewItemForm({
           </Notice>
         );
       }
-      return <Notice tone="warning">{copy.newItem.reasons[outcome.reason]}</Notice>;
+      return (
+        <Notice
+          tone="warning"
+          action={
+            <Button variant="ghost" size="sm" leadingIcon="refresh" onClick={retry}>
+              {copy.newItem.retry}
+            </Button>
+          }
+        >
+          {copy.newItem.reasons[outcome.reason]}
+        </Notice>
+      );
     }
     if (!url) return <Notice tone="info">{copy.newItem.reasons.none}</Notice>;
     return <Notice tone="warning">{copy.newItem.reasons.unsupported}</Notice>;
   })();
 
-  const failed =
-    status.kind === 'done' && !status.outcome.ok && status.outcome.reason !== 'wishlist';
-
   return (
     <form onSubmit={onSubmit} noValidate className="space-y-6">
-      <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{copy.newItem.title}</h1>
+      <h1 className="text-title font-bold">{copy.newItem.title}</h1>
       {notice}
-      {failed && (
-        <Button
-          variant="ghost"
-          onClick={() => {
-            setStatus({ kind: 'loading' });
-            setAttempt((n) => n + 1);
-          }}
-        >
-          {copy.newItem.retry}
-        </Button>
-      )}
 
-      <div className="grid gap-6 rounded-3xl bg-white p-6 ring-1 ring-stone-200 sm:grid-cols-[10rem_1fr] dark:bg-stone-900 dark:ring-stone-800">
-        <ProductImage
-          src={form.imageUrl || undefined}
-          alt=""
-          className="mx-auto h-40 w-40 rounded-2xl sm:mx-0"
-        />
-        <div className="space-y-4">
-          <Field
-            label={copy.newItem.fields.title}
-            id="title"
-            error={titleError ? copy.newItem.titleRequired : null}
-          >
-            <input
-              id="title"
-              type="text"
-              aria-required="true"
-              maxLength={MAX_TITLE_LENGTH}
-              value={form.title}
-              onChange={(event) => {
-                setForm({ ...form, title: event.target.value });
-                setTitleError(false);
-              }}
-              placeholder={copy.newItem.fields.titlePlaceholder}
-              className={inputClass}
-              disabled={status.kind === 'loading'}
+      <Surface>
+        {loading ? (
+          <PreviewSkeleton />
+        ) : (
+          <div className="grid gap-6 sm:grid-cols-[10rem_1fr]">
+            <ProductImage
+              src={form.imageUrl || undefined}
+              alt=""
+              className="mx-auto h-40 w-40 rounded-tile sm:mx-0"
             />
-          </Field>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label={copy.newItem.fields.price} id="price">
-              <input
-                id="price"
-                type="text"
-                inputMode="decimal"
-                value={form.price}
-                onChange={(event) => setForm({ ...form, price: event.target.value })}
-                placeholder={copy.newItem.fields.pricePlaceholder}
-                className={inputClass}
-                disabled={status.kind === 'loading'}
-              />
-            </Field>
-            <Field label={copy.newItem.fields.imageUrl} id="image">
-              <input
-                id="image"
-                type="url"
-                value={form.imageUrl}
-                onChange={(event) => setForm({ ...form, imageUrl: event.target.value })}
-                placeholder={copy.newItem.fields.imagePlaceholder}
-                className={inputClass}
-                disabled={status.kind === 'loading'}
-              />
-            </Field>
-          </div>
-        </div>
-      </div>
-
-      <fieldset className="rounded-3xl bg-white p-6 ring-1 ring-stone-200 dark:bg-stone-900 dark:ring-stone-800">
-        <legend className="px-1 text-sm font-semibold uppercase tracking-wide text-stone-500 dark:text-stone-400">
-          {copy.newItem.fields.category}
-        </legend>
-        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {categories.map((category) => {
-            const selected = form.category === category.id;
-            return (
-              <label
-                key={category.id}
-                className={`flex cursor-pointer flex-col rounded-2xl px-3 py-3 ring-1 transition-colors focus-within:ring-2 focus-within:ring-brand-500 ${
-                  selected
-                    ? 'bg-brand-100 ring-brand-500 dark:bg-brand-900/60 dark:ring-brand-500'
-                    : 'ring-stone-200 hover:bg-stone-50 dark:ring-stone-700 dark:hover:bg-stone-800'
-                }`}
+            <div className="space-y-4">
+              <Field
+                label={copy.newItem.fields.title}
+                id="title"
+                error={titleError ? copy.newItem.titleRequired : null}
               >
-                <input
-                  type="radio"
-                  name="category"
-                  value={category.id}
-                  checked={selected}
-                  onChange={() => setForm({ ...form, category: category.id })}
-                  className="sr-only"
+                <Input
+                  id="title"
+                  type="text"
+                  aria-required="true"
+                  invalid={titleError}
+                  aria-describedby={describedBy('title', undefined, titleError ? 'x' : null)}
+                  maxLength={MAX_TITLE_LENGTH}
+                  value={form.title}
+                  onChange={(event) => {
+                    setForm({ ...form, title: event.target.value });
+                    setTitleError(false);
+                  }}
+                  placeholder={copy.newItem.fields.titlePlaceholder}
                 />
-                <span className="text-xl" aria-hidden="true">
-                  {category.emoji}
-                </span>
-                <span className="mt-1 text-sm font-semibold">{category.label}</span>
-                <span className="text-xs text-stone-500 dark:text-stone-400">
-                  {category.description}
-                </span>
-              </label>
-            );
-          })}
-        </div>
-      </fieldset>
+              </Field>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field
+                  label={copy.newItem.fields.price}
+                  id="price"
+                  error={priceError ? copy.newItem.priceInvalid : null}
+                >
+                  <Input
+                    id="price"
+                    type="text"
+                    inputMode="decimal"
+                    invalid={priceError}
+                    aria-describedby={describedBy('price', undefined, priceError ? 'x' : null)}
+                    value={form.price}
+                    onChange={(event) => {
+                      setForm({ ...form, price: event.target.value });
+                      setPriceError(false);
+                    }}
+                    placeholder={copy.newItem.fields.pricePlaceholder}
+                  />
+                </Field>
+                <Field label={copy.newItem.fields.imageUrl} id="image">
+                  <Input
+                    id="image"
+                    type="url"
+                    value={form.imageUrl}
+                    onChange={(event) => setForm({ ...form, imageUrl: event.target.value })}
+                    placeholder={copy.newItem.fields.imagePlaceholder}
+                  />
+                </Field>
+              </div>
+            </div>
+          </div>
+        )}
+      </Surface>
+
+      <Surface as="div">
+        <fieldset>
+          <legend className="eyebrow px-1">{copy.newItem.fields.category}</legend>
+          <p className="mt-1 text-sm text-ink-muted">{copy.newItem.fields.categoryHint}</p>
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {categories.map((category) => {
+              const selected = form.category === category.id;
+              return (
+                <label
+                  key={category.id}
+                  className={`flex min-h-24 cursor-pointer flex-col rounded-tile px-3 py-3 ring-1 transition-colors focus-within:ring-2 focus-within:ring-brand-500 ${
+                    selected
+                      ? 'bg-brand-100 ring-brand-500 dark:bg-brand-900/60 dark:ring-brand-500'
+                      : 'ring-line hover:bg-surface-sunken'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="category"
+                    value={category.id}
+                    checked={selected}
+                    onChange={() => setForm({ ...form, category: category.id })}
+                    className="sr-only"
+                  />
+                  <span className="text-2xl" aria-hidden="true">
+                    {category.emoji}
+                  </span>
+                  <span className="mt-1 text-sm font-semibold">{category.label}</span>
+                  <span className="text-xs text-ink-faint">{category.description}</span>
+                </label>
+              );
+            })}
+          </div>
+        </fieldset>
+      </Surface>
 
       <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
         <ButtonLink to="/" variant="ghost">
           {copy.newItem.back}
         </ButtonLink>
-        <Button type="submit" size="lg" disabled={status.kind === 'loading'}>
+        <Button type="submit" size="lg" trailingIcon="chevron-right" disabled={loading}>
           {copy.newItem.start}
         </Button>
       </div>
     </form>
-  );
-}
-
-const inputClass =
-  'min-h-11 w-full rounded-xl border border-stone-300 bg-white px-3 text-base text-stone-900 placeholder:text-stone-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 disabled:opacity-60 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100';
-
-function Field({
-  label,
-  id,
-  error,
-  children,
-}: {
-  label: string;
-  id: string;
-  error?: string | null;
-  children: React.ReactNode;
-}) {
-  return (
-    <div>
-      <label htmlFor={id} className="mb-1.5 block text-sm font-medium">
-        {label}
-      </label>
-      {children}
-      {error && (
-        <p role="alert" className="mt-1 text-sm text-rose-600 dark:text-rose-300">
-          {error}
-        </p>
-      )}
-    </div>
   );
 }

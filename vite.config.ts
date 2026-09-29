@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import { fileURLToPath } from 'node:url';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
 /**
@@ -68,7 +68,7 @@ function pwa(): Plugin[] {
     manifest: false,
     devOptions: { enabled: false },
     workbox: {
-      globPatterns: ['**/*.{js,css,html,svg,png,webmanifest}'],
+      globPatterns: ['**/*.{js,css,html,svg,png,woff2,webmanifest}'],
       navigateFallback: '/index.html',
       navigateFallbackDenylist: [/^\/api\//],
       cleanupOutdatedCaches: true,
@@ -76,8 +76,18 @@ function pwa(): Plugin[] {
   });
 }
 
+/** The app version from package.json, shown in the footer and in the settings. */
+const appVersion = (
+  JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as {
+    version: string;
+  }
+).version;
+
 export default defineConfig({
   plugins: [react(), tailwindcss(), localFunctions(), pwa()],
+  define: {
+    __APP_VERSION__: JSON.stringify(appVersion),
+  },
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

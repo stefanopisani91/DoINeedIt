@@ -1,8 +1,8 @@
 {
   "name": "doineedit",
   "private": true,
-  "version": "1.2.0",
-  "description": "Chiediti se ti serve davvero prima di comprare: valuta un acquisto Amazon con poche domande e un punteggio di necessità.",
+  "version": "2.0.0-rc.1",
+  "description": "Chiediti se ti serve davvero prima di comprare: valuta un acquisto con poche domande, un punteggio di necessità e i numeri di quanto hai risparmiato.",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -19,6 +19,7 @@
     "check": "npm run lint && npm run format:check && npm run typecheck && npm run test && npm run build"
   },
   "dependencies": {
+    "@fontsource-variable/manrope": "^5.3.0",
     "lz-string": "^1.5.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

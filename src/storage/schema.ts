@@ -46,6 +46,20 @@ export const resultSchema = z.object({
   maybeCount: z.number().int().min(0),
 });
 
+export const decisionSchema = z.object({
+  outcome: z.enum(['bought', 'skipped']),
+  at: z.string(),
+  price: priceSchema.optional(),
+});
+
+export const historyEntrySchema = z.object({
+  at: z.string(),
+  score: z.number().min(0).max(100),
+  verdict: z.enum(['buy', 'wait', 'skip']),
+  answeredCount: z.number().int().min(0),
+  outcome: z.enum(['bought', 'skipped']).optional(),
+});
+
 export const itemSchema = z.object({
   id: z.string().min(1),
   createdAt: z.string(),
@@ -69,6 +83,12 @@ export const itemSchema = z.object({
   result: resultSchema,
   engineVersion: z.number().int(),
   note: z.string().max(2000).optional(),
+  // Added in 2.0; all optional, so files and links from 1.x stay valid. The
+  // history cap is enforced when entries are added, never here: a longer list
+  // must not invalidate the whole item.
+  decision: decisionSchema.optional(),
+  reconsiderAt: z.string().optional(),
+  history: z.array(historyEntrySchema).optional(),
 });
 
 export const exportFileSchema = z.object({

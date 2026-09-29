@@ -108,15 +108,57 @@ describe('settings store', () => {
     expect(useSettingsStore.getState().language).toBeNull();
   });
 
+  it('persists the interface theme, or the choice to follow the system', () => {
+    useSettingsStore.getState().setTheme('dark');
+    expect(useSettingsStore.getState().theme).toBe('dark');
+    expect(window.localStorage.getItem(SETTINGS_KEY)).toContain('"theme":"dark"');
+    useSettingsStore.getState().setTheme(null);
+    expect(useSettingsStore.getState().theme).toBeNull();
+    expect(window.localStorage.getItem(SETTINGS_KEY)).toContain('"theme":null');
+  });
+
+  it('persists whether the onboarding was seen', () => {
+    useSettingsStore.getState().setOnboardingSeen(true);
+    expect(useSettingsStore.getState().onboardingSeen).toBe(true);
+    expect(window.localStorage.getItem(SETTINGS_KEY)).toContain('"onboardingSeen":true');
+    useSettingsStore.getState().setOnboardingSeen(false);
+    expect(useSettingsStore.getState().onboardingSeen).toBe(false);
+    expect(window.localStorage.getItem(SETTINGS_KEY)).toContain('"onboardingSeen":false');
+  });
+
   it('migrates settings stored before the language existed', () => {
     expect(migrateSettings({ budget: { amount: 300, currency: 'EUR' } }, 1)).toEqual({
       budget: { amount: 300, currency: 'EUR' },
       language: null,
+      theme: null,
+      onboardingSeen: false,
     });
-    expect(migrateSettings(undefined, 1)).toEqual({ budget: null, language: null });
+    expect(migrateSettings(undefined, 1)).toEqual({
+      budget: null,
+      language: null,
+      theme: null,
+      onboardingSeen: false,
+    });
     expect(migrateSettings({ budget: null, language: 'en' }, 2)).toEqual({
       budget: null,
       language: 'en',
+      theme: null,
+      onboardingSeen: false,
     });
+  });
+
+  it('keeps the theme and the onboarding flag when present', () => {
+    expect(
+      migrateSettings({ budget: null, language: 'it', theme: 'dark', onboardingSeen: true }, 2),
+    ).toEqual({ budget: null, language: 'it', theme: 'dark', onboardingSeen: true });
+  });
+
+  it('falls back to the defaults for a theme or an onboarding flag of the wrong shape', () => {
+    expect(migrateSettings({ budget: null, language: null, theme: 'blue' }, 2)).toMatchObject({
+      theme: null,
+    });
+    expect(
+      migrateSettings({ budget: null, language: null, onboardingSeen: 'yes' }, 2),
+    ).toMatchObject({ onboardingSeen: false });
   });
 });

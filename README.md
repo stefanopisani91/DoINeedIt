@@ -1,6 +1,8 @@
 # DoINeedIt · Ti serve davvero?
 
-Un'app web che mi aiuta a non comprare cose inutili. Incollo il link di un prodotto, rispondo a poche domande sincere (sì, no, forse) e ottengo un punteggio da 0 a 100 che dice quanto mi serve davvero quell'acquisto. Ogni prodotto valutato resta salvato con foto, prezzo e verdetto, così a fine mese vedo quanti impulsi ho fermato.
+Un'app web che mi aiuta a non comprare cose inutili. Incollo il link di un prodotto, rispondo a poche domande sincere (sì, no, forse) e ottengo un punteggio da 0 a 100 che dice quanto mi serve davvero quell'acquisto. Ogni prodotto valutato resta salvato con foto, prezzo e verdetto; dopo posso segnare cosa ho fatto davvero (comprato o no) e la pagina **Insight** mi dice quanti impulsi ho fermato e quanti soldi non ho speso.
+
+**Versione:** 2.0.0-rc.1 in sviluppo (la 2.0 arriva in due sessioni: interfaccia e funzionalità, poi correzioni e test; il sito pubblicato è ancora la 1.2.0).
 
 **Demo:** https://do-i-need-it-now.netlify.app
 
@@ -12,12 +14,19 @@ Ho costruito DoINeedIt come progetto dimostrativo: volevo un caso reale, piccolo
 2. **Scelgo la categoria** (tecnologia, casa, cucina, abbigliamento, sport e hobby, libri e media, salute e bellezza, altro).
 3. **Rispondo alle domande.** Sono poche se il quadro è chiaro, di più se resta incerto.
 4. **Leggo il verdetto:** percentuale di necessità, giudizio in tre fasce, cinque parametri, le risposte che hanno pesato di più e qualche consiglio pratico.
+5. **Segno l'esito.** Comprato o non comprato: l'esito vince sul verdetto nei conti. Se il verdetto è "rimanda", l'app fissa una data di ripensamento a trenta giorni e me lo ricorda sulla scheda e nel dettaglio. Se rivaluto un oggetto, la valutazione precedente resta nello storico e la nota non si perde.
 
 L'app si può **installare** come una app vera (dal menu del browser, "Installa app" o "Aggiungi a schermata Home"): si apre a schermo intero, funziona anche offline e su Android compare nel menu **Condividi**. Così dall'app Amazon basta toccare Condividi e scegliere DoINeedIt: il link arriva direttamente alla pagina di valutazione. Quando pubblico una versione nuova, l'app installata lo segnala con un avviso e si aggiorna solo quando lo chiedo, mai a metà di un questionario.
 
 Nelle impostazioni posso indicare il mio **budget mensile** per gli acquisti non indispensabili: da quel momento il prezzo di ogni prodotto viene confrontato con quella cifra e pesa nel punteggio.
 
-L'interfaccia è in **italiano e in inglese**: segue la lingua del browser e si può scegliere nelle impostazioni. Domande, categorie, verdetti ed esempi sono tradotti; le valutazioni già fatte si leggono nella lingua scelta, perché ogni risposta è salvata con l'identificativo della domanda, non con il suo testo.
+L'interfaccia è in **italiano e in inglese**: segue la lingua del browser e si può scegliere nelle impostazioni. Domande, categorie, verdetti ed esempi sono tradotti; le valutazioni già fatte si leggono nella lingua scelta, perché ogni risposta è salvata con l'identificativo della domanda, non con il suo testo. Il **tema** è chiaro, scuro o come il sistema, sempre dalle impostazioni.
+
+### La libreria e gli Insight
+
+La home riassume in quattro numeri quello che ho valutato (valutazioni, impulsi fermati, soldi non spesi, oggetti da ripensare) e permette di cercare tra gli oggetti, filtrarli per verdetto e categoria e ordinarli per data, necessità o prezzo; lo stato dei filtri sta nell'indirizzo, così il tasto indietro lo conserva. Ogni scheda mostra il verdetto con un bordo colorato, la data relativa, l'esito e, per i "rimanda", quanti giorni mancano al ripensamento.
+
+La pagina **Insight** mette insieme le valutazioni: soldi non spesi (per valuta, mai convertiti), impulsi fermati, necessità media e quota di "forse", la ciambella dei verdetti, le valutazioni per mese, la distribuzione per categoria, quanto ho comprato questo mese rispetto al budget e gli oggetti pronti per il ripensamento. I grafici sono SVG disegnati a mano, ognuno con la sua tabella dei dati per chi non li vede. Un oggetto conta come "impulso fermato" se ho segnato "non comprato", oppure se il verdetto era "non ti serve" e non ho ancora segnato nulla; conta come "speso" solo se ho segnato "comprato". Il calcolo vive in `src/insights/`, è deterministico e coperto da test, e non tocca il motore.
 
 ### Altri negozi
 
@@ -52,11 +61,11 @@ Senza budget impostato, o senza prezzo, le domande sul budget vengono fatte lo s
 
 ## Privacy
 
-Tutto resta nel browser: niente account, niente database, niente strumenti di analisi. I dati si esportano e importano come file JSON, e ogni valutazione ha un link condivisibile in cui i dati viaggiano dopo il `#`, quindi non raggiungono mai un server. Il budget mensile, la lingua e i prodotti in attesa di valutazione sono impostazioni del browser: non si esportano, ma ogni valutazione ricorda il budget con cui è stata fatta. Le funzioni edge leggono una sola volta la pagina pubblica del prodotto, del negozio o della lista dei desideri, e non memorizzano né il link né ciò che leggono.
+Tutto resta nel browser: niente account, niente database, niente strumenti di analisi. I dati si esportano e importano come file JSON (e si esportano anche in CSV, per un foglio di calcolo), e ogni valutazione ha un link condivisibile in cui i dati viaggiano dopo il `#`, quindi non raggiungono mai un server: nel link ci sono anche l'esito, la data di ripensamento e lo storico leggero delle rivalutazioni (data, punteggio, verdetto, esito), non le risposte precedenti. Il budget mensile, la lingua, il tema e i prodotti in attesa di valutazione sono impostazioni del browser: non si esportano, ma ogni valutazione ricorda il budget con cui è stata fatta. Le funzioni edge leggono una sola volta la pagina pubblica del prodotto, del negozio o della lista dei desideri, e non memorizzano né il link né ciò che leggono.
 
 ## Stack
 
-- **React 19 + TypeScript** (strict), **Vite**, **Tailwind CSS 4**, **React Router**, **zustand** per lo stato persistente, **zod** per validare import e link condivisi.
+- **React 19 + TypeScript** (strict), **Vite**, **Tailwind CSS 4** con un piccolo design system di token semantici (superfici, testo, verdetti, raggi, ombre) e componenti base, **React Router** con le pagine secondarie caricate su richiesta, **zustand** per lo stato persistente, **zod** per validare import e link condivisi. Il carattere è **Manrope** (solo il sottoinsieme latino, impacchettato con l'app: niente CDN, funziona offline).
 - **PWA**: manifest con `share_target` (uno per lingua), service worker generato da `vite-plugin-pwa` (Workbox) che precarica l'app shell e la serve offline; nessuna cache per le funzioni di anteprima e per le immagini dei prodotti.
 - **Netlify Edge Functions** per la lettura della pagina prodotto (`netlify/edge-functions/preview.ts`) e della lista dei desideri (`netlify/edge-functions/wishlist.ts`), con parser dedicati senza DOM per Amazon, per i meta tag Open Graph e per le liste, e un helper comune di lettura con limiti su redirect, dimensione, tempi e indirizzi raggiungibili. Ho scelto l'edge dopo aver misurato che alle funzioni serverless classiche, che girano su indirizzi AWS, Amazon risponde con una pagina di verifica, mentre alla rete edge serve la pagina vera.
 - **Vitest** per motore, parser, funzioni edge, storage, lingue e ricezione dei link condivisi, con Testing Library per il banner di aggiornamento; **Playwright** per i flussi end-to-end su mobile e desktop, in italiano e in inglese.
@@ -66,12 +75,13 @@ Tutto resta nel browser: niente account, niente database, niente strumenti di an
 
 ```
 src/engine/      motore decisionale puro (tipi, punteggio, flusso adattivo)
+src/insights/    sopra il motore: statistiche (computeInsights), attesa di 30 giorni e storico (lifecycle)
 src/data/        domande (id, pesi, regole), categorie, esempi: i testi arrivano dai file lingua
 src/i18n/        it.ts e en.ts con tutti i testi, scelta della lingua (index.ts)
-src/lib/         riconoscimento link Amazon, link ricevuti dal menu Condividi, link condivisibili, formattazione
-src/storage/     stato persistente, coda "da valutare", impostazioni, schema, export/import
+src/lib/         riconoscimento link Amazon, link ricevuti dal menu Condividi, link condivisibili, formattazione, ricerca e filtri della libreria
+src/storage/     stato persistente, coda "da valutare", impostazioni, schema, export JSON e CSV, import
 src/api/         client delle funzioni di anteprima e lista dei desideri
-src/ui/          pagine e componenti
+src/ui/          pagine, componenti base (Surface, Button, Field, Icon, ConfirmDialog…), grafici, tema
 public/          manifest della PWA (italiano e inglese), icone, favicon, immagini di esempio
 scripts/         generazione delle icone dal favicon
 netlify/         funzioni edge, helper di lettura e parser (Amazon, Open Graph, liste dei desideri)
@@ -101,16 +111,21 @@ Comandi, architettura e convenzioni sono in [CONTRIBUTING.md](CONTRIBUTING.md).
 - DoINeedIt compare nel menu Condividi solo su Android e solo dopo averla installata. Su iPhone e iPad l'app si installa e funziona offline, ma il menu Condividi non è disponibile per le app web: il link va incollato a mano (i link brevi `amzn.eu/d/…` dell'app Amazon sono riconosciuti e risolti alla pagina prodotto).
 - L'avviso di nuova versione arriva quando l'app viene aperta o torna in primo piano, non mentre è già aperta sullo schermo.
 - Il manifest è un file statico per lingua: l'app installata prende nome e descrizione dalla lingua in uso al momento dell'installazione.
+- Il pulsante "Installa" nelle impostazioni compare solo dove il browser lo permette (Chromium); su iPhone e iPad resta la procedura manuale.
+- Il promemoria dei trenta giorni vive solo dentro l'app: nessuna notifica, perché non c'è un server.
+- Lo storico delle rivalutazioni è leggero (data, punteggio, verdetto, esito, al massimo dieci voci): le risposte precedenti non si conservano.
 
 ## Roadmap
 
-La versione 1.2.0 chiude il progetto: tutti i punti previsti sono fatti.
+La 1.2.0 aveva chiuso la roadmap iniziale; la 2.0 rende l'app più completa e più curata.
 
 - [x] Criterio **budget**: peso della spesa sul mio budget mensile come quinto parametro.
 - [x] App installabile (PWA), ricezione dei link dal menu Condividi di Android e avviso di nuova versione.
 - [x] Anteprima generica per altri negozi tramite meta tag Open Graph.
 - [x] Import di una lista dei desideri pubblica.
 - [x] Interfaccia in inglese.
+- [x] **2.0, sessione 1.5**: design system e nuova grafica (token, Manrope, componenti base, navigazione a quattro voci), tema chiaro/scuro/sistema, esito della decisione, attesa di trenta giorni, storico delle rivalutazioni, libreria con ricerca, filtri e riepilogo, pagina Insight con grafici, impostazioni ristrutturate, export CSV, invito all'installazione, scorciatoie nel manifest, primo avvio.
+- [ ] **2.0, sessione 2.0**: correzione dei difetti, test, pubblicazione su Netlify e tag `v2.0.0`.
 
 ## Licenza
 

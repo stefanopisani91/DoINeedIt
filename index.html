@@ -4,16 +4,46 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
-    <meta name="theme-color" content="#0f766e" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#042f2e" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#0f766e" />
     <meta
       name="description"
       content="Ti serve davvero? Incolla il link di un prodotto, rispondi a poche domande e scopri quanto ti serve quell’acquisto."
     />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="DoINeedIt" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="DoINeedIt · Ti serve davvero?" />
+    <meta
+      property="og:description"
+      content="Incolla il link di un prodotto, rispondi a poche domande e scopri quanto ti serve quell’acquisto."
+    />
+    <meta property="og:image" content="/icons/icon-512.png" />
+    <meta name="twitter:card" content="summary" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon-180.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <title>DoINeedIt · Ti serve davvero?</title>
+    <script>
+      // Resolves the theme before the first paint so the page never flashes:
+      // the choice saved in the settings, or the system preference.
+      (function () {
+        var theme = null;
+        try {
+          var saved = localStorage.getItem('doineedit:settings');
+          if (saved) theme = JSON.parse(saved).state.theme;
+        } catch (error) {
+          theme = null;
+        }
+        if (theme !== 'light' && theme !== 'dark') {
+          theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+        document.documentElement.setAttribute('data-theme', theme);
+        var meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) meta.setAttribute('content', theme === 'dark' ? '#042f2e' : '#0f766e');
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

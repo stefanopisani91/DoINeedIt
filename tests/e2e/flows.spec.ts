@@ -165,8 +165,9 @@ test.describe('examples, sharing and settings', () => {
     await page.goto('/settings');
     await page.getByRole('button', { name: 'Carica gli esempi' }).click();
     await expect(page.getByText('Caricati 3 esempi.')).toBeVisible();
-    page.once('dialog', (dialog) => dialog.accept());
     await page.getByRole('button', { name: 'Cancella tutto' }).click();
+    // The app asks with its own dialog, never with the browser's.
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Sì, cancella tutto' }).click();
     await expect(page.getByText('Tutto cancellato.')).toBeVisible();
     await page.goto('/');
     await expect(page.getByText('Nessun oggetto valutato, per ora')).toBeVisible();

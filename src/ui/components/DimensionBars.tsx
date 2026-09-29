@@ -1,14 +1,9 @@
-import { DIMENSIONS, type Dimension } from '@/engine';
+import { DIMENSIONS, verdictFor, type Dimension } from '@/engine';
 import { useCopy } from '@/i18n';
+import { verdictStyle } from '../verdict';
 
 interface DimensionBarsProps {
   dimensions: Record<Dimension, number | null>;
-}
-
-function barColor(value: number): string {
-  if (value >= 70) return 'bg-emerald-500';
-  if (value >= 40) return 'bg-amber-500';
-  return 'bg-rose-500';
 }
 
 export function DimensionBars({ dimensions }: DimensionBarsProps) {
@@ -41,7 +36,7 @@ export function DimensionBars({ dimensions }: DimensionBarsProps) {
             >
               {value !== null && (
                 <div
-                  className={`h-full rounded-full ${barColor(value)}`}
+                  className={`h-full rounded-full ${verdictStyle(verdictFor(value), copy).fill}`}
                   style={{ width: `${value}%` }}
                 />
               )}

@@ -1,7 +1,8 @@
 import { ENGINE_VERSION, budgetShare, evaluate, type Answers, type CategoryId } from '@/engine';
 import type { Copy, ExampleCopy } from '@/i18n/it';
 import { it } from '@/i18n/it';
-import type { Item, Price } from '@/storage/types';
+import { addDays, COOLING_OFF_DAYS } from '@/insights/lifecycle';
+import type { DecisionOutcome, Item, Price } from '@/storage/types';
 import { questionsIn } from './questions';
 
 type ExampleKey = keyof Copy['examples'];
@@ -16,6 +17,8 @@ interface ExampleSeed {
   asin: string;
   daysAgo: number;
   answers: Answers;
+  /** What happened afterwards, recorded this many days after the evaluation. */
+  decision?: { outcome: DecisionOutcome; daysAfter: number; price?: Price };
 }
 
 /** The monthly budget the example items were evaluated against. */
@@ -41,6 +44,7 @@ const SEEDS: ExampleSeed[] = [
       impulse_today: 'yes',
       budget_sacrifice: 'yes',
     },
+    decision: { outcome: 'skipped', daysAfter: 1 },
   },
   {
     key: 'airfryer',
@@ -92,6 +96,7 @@ const SEEDS: ExampleSeed[] = [
       impulse_today: 'no',
       budget_sacrifice: 'no',
     },
+    decision: { outcome: 'bought', daysAfter: 2, price: { amount: 109.9, currency: 'EUR' } },
   },
 ];
 
@@ -105,6 +110,12 @@ function toItem(seed: ExampleSeed, copy: Copy): Item {
   const askedOrder = Object.keys(seed.answers);
   const timestamp = isoDaysAgo(seed.daysAgo);
   const text: ExampleCopy = copy.examples[seed.key];
+  const result = evaluate(
+    questionsIn(copy),
+    seed.category,
+    seed.answers,
+    budgetShare(seed.price, EXAMPLE_BUDGET),
+  );
   const item: Item = {
     id: seed.id,
     createdAt: timestamp,
@@ -117,15 +128,19 @@ function toItem(seed: ExampleSeed, copy: Copy): Item {
     answers: seed.answers,
     askedOrder,
     budget: EXAMPLE_BUDGET,
-    result: evaluate(
-      questionsIn(copy),
-      seed.category,
-      seed.answers,
-      budgetShare(seed.price, EXAMPLE_BUDGET),
-    ),
+    result,
     engineVersion: ENGINE_VERSION,
   };
   if (text.note) item.note = text.note;
+  // Mirrors what the questionnaire records: a date to reconsider a "wait" verdict.
+  if (result.verdict === 'wait') item.reconsiderAt = addDays(timestamp, COOLING_OFF_DAYS);
+  if (seed.decision) {
+    item.decision = {
+      outcome: seed.decision.outcome,
+      at: isoDaysAgo(seed.daysAgo - seed.decision.daysAfter),
+      ...(seed.decision.price ? { price: seed.decision.price } : {}),
+    };
+  }
   return item;
 }
 

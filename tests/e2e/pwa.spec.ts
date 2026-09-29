@@ -11,6 +11,7 @@ test.describe('installable app', () => {
       start_url: string;
       icons: { src: string; sizes: string; purpose?: string }[];
       share_target: { action: string; method: string; params: Record<string, string> };
+      shortcuts: { name: string; url: string }[];
     };
     expect(manifest.display).toBe('standalone');
     expect(manifest.start_url).toBe('/');
@@ -19,6 +20,10 @@ test.describe('installable app', () => {
       method: 'GET',
       params: { title: 'title', text: 'text', url: 'url' },
     });
+
+    // Long-press shortcuts on the installed icon: a new evaluation and the insights.
+    expect(manifest.shortcuts).toHaveLength(2);
+    expect(manifest.shortcuts[0]?.url).toBe('/new?source=shortcut');
 
     const sizes = manifest.icons.map((icon) => icon.sizes);
     expect(sizes).toContain('192x192');

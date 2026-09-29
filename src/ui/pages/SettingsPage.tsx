@@ -1,15 +1,57 @@
-import { useRef, useState, type ChangeEvent, type FormEvent } from 'react';
+import { useId, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { exampleItems } from '@/data/examples';
+import { ENGINE_VERSION } from '@/engine';
 import { LANGUAGES, isLanguage, useCopy } from '@/i18n';
 import { formatPrice, parsePriceInput } from '@/lib/format';
+import { buildCsv, exportCsvFileName } from '@/storage/csv';
 import { buildExport, exportFileName, parseImport } from '@/storage/export';
-import { useSettingsStore } from '@/storage/settings';
+import { useSettingsStore, type Theme } from '@/storage/settings';
 import { useItemsStore } from '@/storage/store';
-import { Button } from '../components/Button';
+import { Button, ButtonAnchor } from '../components/Button';
+import { ConfirmDialog } from '../components/ConfirmDialog';
+import { Field, Input, Select } from '../components/Field';
+import { Icon, type IconName } from '../components/Icon';
 import { Notice } from '../components/Notice';
+import { Surface } from '../components/Surface';
+import { useInstallPrompt } from '../use-install-prompt';
 
 const REPOSITORY_URL = 'https://github.com/stefanopisani91/DoINeedIt';
+
+type ThemeChoice = Theme | 'system';
+
+const THEME_CHOICES: Array<{ value: ThemeChoice; icon: IconName }> = [
+  { value: 'system', icon: 'monitor' },
+  { value: 'light', icon: 'sun' },
+  { value: 'dark', icon: 'moon' },
+];
+
+/** A settings block: title and description on the left, controls on the right from `sm:`. */
+function Section({
+  icon,
+  title,
+  body,
+  children,
+}: {
+  icon: IconName;
+  title: string;
+  body: string;
+  children: ReactNode;
+}) {
+  const id = useId();
+  return (
+    <Surface aria-labelledby={id} className="sm:grid sm:grid-cols-[12rem_1fr] sm:gap-8">
+      <div className="mb-4 sm:mb-0">
+        <h2 id={id} className="flex items-center gap-2 text-heading font-semibold">
+          <Icon name={icon} size={20} className="text-brand-700 dark:text-brand-300" />
+          {title}
+        </h2>
+        <p className="mt-2 text-sm text-ink-muted">{body}</p>
+      </div>
+      <div className="space-y-4">{children}</div>
+    </Surface>
+  );
+}
 
 export function SettingsPage() {
   const copy = useCopy();
@@ -20,11 +62,21 @@ export function SettingsPage() {
   const setBudget = useSettingsStore((state) => state.setBudget);
   const language = useSettingsStore((state) => state.language);
   const setLanguage = useSettingsStore((state) => state.setLanguage);
+  const theme = useSettingsStore((state) => state.theme);
+  const setTheme = useSettingsStore((state) => state.setTheme);
   const fileInput = useRef<HTMLInputElement>(null);
+  const installPrompt = useInstallPrompt();
   const [message, setMessage] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
+  const [clearing, setClearing] = useState(false);
   const [budgetInput, setBudgetInput] = useState(() =>
     budget ? String(budget.amount).replace('.', copy.lang === 'it' ? ',' : '.') : '',
   );
+
+  const themeLabels: Record<ThemeChoice, string> = {
+    system: copy.settings.themeSystem,
+    light: copy.settings.themeLight,
+    dark: copy.settings.themeDark,
+  };
 
   const saveBudget = (event: FormEvent) => {
     event.preventDefault();
@@ -47,17 +99,20 @@ export function SettingsPage() {
     setMessage({ tone: 'success', text: copy.settings.budgetRemoved });
   };
 
-  const exportFile = () => {
-    const blob = new Blob([JSON.stringify(buildExport(items), null, 2)], {
-      type: 'application/json',
-    });
-    const url = URL.createObjectURL(blob);
+  const download = (content: string, type: string, name: string) => {
+    const url = URL.createObjectURL(new Blob([content], { type }));
     const anchor = document.createElement('a');
     anchor.href = url;
-    anchor.download = exportFileName();
+    anchor.download = name;
     anchor.click();
     URL.revokeObjectURL(url);
   };
+
+  const exportFile = () =>
+    download(JSON.stringify(buildExport(items), null, 2), 'application/json', exportFileName());
+
+  const exportCsv = () =>
+    download(buildCsv(items, copy), 'text/csv;charset=utf-8', exportCsvFileName());
 
   const importFile = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -78,34 +133,57 @@ export function SettingsPage() {
   };
 
   const clearAll = () => {
-    if (!window.confirm(copy.settings.clearConfirm)) return;
+    setClearing(false);
     clear();
     setMessage({ tone: 'success', text: copy.settings.cleared });
   };
 
-  const sectionClass =
-    'space-y-4 rounded-3xl bg-white p-6 ring-1 ring-stone-200 dark:bg-stone-900 dark:ring-stone-800';
-
   return (
-    <div className="space-y-8">
-      <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{copy.settings.title}</h1>
+    <div className="space-y-6">
+      <h1 className="text-title font-bold">{copy.settings.title}</h1>
       {message && <Notice tone={message.tone}>{message.text}</Notice>}
 
-      <section className={sectionClass}>
-        <h2 className="text-lg font-semibold">{copy.settings.languageTitle}</h2>
-        <p className="text-sm text-stone-600 dark:text-stone-300">{copy.settings.languageBody}</p>
-        <div className="flex-1 basis-40 sm:max-w-xs">
-          <label htmlFor="language" className="mb-1 block text-sm font-medium">
-            {copy.settings.languageLabel}
-          </label>
-          <select
+      <Section icon="sun" title={copy.settings.themeTitle} body={copy.settings.themeBody}>
+        <fieldset>
+          <legend className="mb-2 block text-sm font-medium">{copy.settings.themeLabel}</legend>
+          <div className="grid grid-cols-3 gap-2" role="radiogroup">
+            {THEME_CHOICES.map((choice) => {
+              const selected = (theme ?? 'system') === choice.value;
+              return (
+                <label
+                  key={choice.value}
+                  className={`flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-control px-3 text-sm font-medium ring-1 transition-colors focus-within:ring-2 focus-within:ring-brand-500 ${
+                    selected
+                      ? 'bg-brand-100 text-brand-900 ring-brand-500 dark:bg-brand-900/60 dark:text-brand-100'
+                      : 'bg-surface ring-line-strong hover:bg-surface-sunken'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="theme"
+                    value={choice.value}
+                    checked={selected}
+                    onChange={() => setTheme(choice.value === 'system' ? null : choice.value)}
+                    className="sr-only"
+                  />
+                  <Icon name={choice.icon} size={16} />
+                  {themeLabels[choice.value]}
+                </label>
+              );
+            })}
+          </div>
+        </fieldset>
+      </Section>
+
+      <Section icon="link" title={copy.settings.languageTitle} body={copy.settings.languageBody}>
+        <Field id="language" label={copy.settings.languageLabel} className="sm:max-w-xs">
+          <Select
             id="language"
             value={language ?? 'auto'}
             onChange={(event) => {
               const value = event.target.value;
               setLanguage(isLanguage(value) ? value : null);
             }}
-            className="min-h-11 w-full rounded-xl border border-stone-300 bg-white px-3 py-2 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 dark:border-stone-700 dark:bg-stone-950"
           >
             <option value="auto">{copy.settings.languageAuto}</option>
             {LANGUAGES.map((code) => (
@@ -113,33 +191,27 @@ export function SettingsPage() {
                 {copy.settings.languageNames[code]}
               </option>
             ))}
-          </select>
-        </div>
-      </section>
+          </Select>
+        </Field>
+      </Section>
 
-      <section className={sectionClass}>
-        <h2 className="text-lg font-semibold">{copy.settings.budgetTitle}</h2>
-        <p className="text-sm text-stone-600 dark:text-stone-300">{copy.settings.budgetBody}</p>
-        <p className="text-sm text-stone-500 dark:text-stone-400">
+      <Section icon="wallet" title={copy.settings.budgetTitle} body={copy.settings.budgetBody}>
+        <p className="text-sm text-ink-faint">
           {budget
             ? copy.settings.budgetCurrent(formatPrice(budget.amount, budget.currency, copy.locale))
             : copy.settings.budgetNone}
         </p>
         <form onSubmit={saveBudget} className="flex flex-wrap items-end gap-3">
-          <div className="flex-1 basis-40">
-            <label htmlFor="budget" className="mb-1 block text-sm font-medium">
-              {copy.settings.budgetLabel}
-            </label>
-            <input
+          <Field id="budget" label={copy.settings.budgetLabel} className="flex-1 basis-40">
+            <Input
               id="budget"
               type="text"
               inputMode="decimal"
               value={budgetInput}
               onChange={(event) => setBudgetInput(event.target.value)}
               placeholder={copy.settings.budgetPlaceholder}
-              className="min-h-11 w-full rounded-xl border border-stone-300 bg-white px-3 py-2 text-base placeholder:text-stone-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 dark:border-stone-700 dark:bg-stone-950"
             />
-          </div>
+          </Field>
           <Button type="submit">{copy.settings.budgetSave}</Button>
           {budget && (
             <Button type="button" variant="secondary" onClick={removeBudget}>
@@ -147,19 +219,32 @@ export function SettingsPage() {
             </Button>
           )}
         </form>
-      </section>
+      </Section>
 
-      <section className={sectionClass}>
-        <h2 className="text-lg font-semibold">{copy.settings.dataTitle}</h2>
-        <p className="text-sm text-stone-600 dark:text-stone-300">{copy.settings.dataBody}</p>
-        <p className="text-sm text-stone-500 dark:text-stone-400">
-          {copy.home.count(items.length)}
-        </p>
+      <Section icon="download" title={copy.settings.dataTitle} body={copy.settings.dataBody}>
+        <p className="text-sm text-ink-faint">{copy.home.count(items.length)}</p>
         <div className="flex flex-wrap gap-3">
-          <Button variant="secondary" onClick={exportFile} disabled={items.length === 0}>
+          <Button
+            variant="secondary"
+            leadingIcon="download"
+            onClick={exportFile}
+            disabled={items.length === 0}
+          >
             {copy.settings.export}
           </Button>
-          <Button variant="secondary" onClick={() => fileInput.current?.click()}>
+          <Button
+            variant="secondary"
+            leadingIcon="download"
+            onClick={exportCsv}
+            disabled={items.length === 0}
+          >
+            {copy.settings.exportCsv}
+          </Button>
+          <Button
+            variant="secondary"
+            leadingIcon="upload"
+            onClick={() => fileInput.current?.click()}
+          >
             {copy.settings.import}
           </Button>
           <input
@@ -170,32 +255,60 @@ export function SettingsPage() {
             onChange={importFile}
             aria-label={copy.settings.import}
           />
-          <Button variant="secondary" onClick={loadExamples}>
+          <Button variant="secondary" leadingIcon="sparkle" onClick={loadExamples}>
             {copy.settings.examples}
           </Button>
-          <Button variant="danger" onClick={clearAll} disabled={items.length === 0}>
+          <Button
+            variant="danger"
+            leadingIcon="trash"
+            onClick={() => setClearing(true)}
+            disabled={items.length === 0}
+          >
             {copy.settings.clear}
           </Button>
         </div>
-      </section>
+        <p className="text-xs text-ink-faint">{copy.settings.dataHint}</p>
+      </Section>
 
-      <section className="space-y-3 rounded-3xl bg-white p-6 ring-1 ring-stone-200 dark:bg-stone-900 dark:ring-stone-800">
-        <h2 className="text-lg font-semibold">{copy.settings.aboutTitle}</h2>
-        <p className="text-sm text-stone-600 dark:text-stone-300">{copy.settings.aboutBody}</p>
-        <p className="flex flex-wrap gap-4 text-sm">
-          <Link to="/privacy" className="underline underline-offset-4">
+      <Section icon="download" title={copy.settings.installTitle} body={copy.settings.installBody}>
+        {installPrompt.installed ? (
+          <p className="text-sm text-ink-faint">{copy.settings.installed}</p>
+        ) : installPrompt.canInstall ? (
+          <Button leadingIcon="download" onClick={() => void installPrompt.install()}>
+            {copy.settings.install}
+          </Button>
+        ) : installPrompt.ios ? (
+          <p className="text-sm text-ink-faint">{copy.settings.installIos}</p>
+        ) : null}
+      </Section>
+
+      <Section icon="info" title={copy.settings.infoTitle} body={copy.settings.aboutBody}>
+        <p className="text-sm text-ink-faint tabular-nums">
+          {copy.settings.version(__APP_VERSION__, ENGINE_VERSION)}
+        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <Link
+            to="/privacy"
+            className="text-sm font-medium underline underline-offset-4 hover:text-brand-700"
+          >
             {copy.settings.privacy}
           </Link>
-          <a
-            href={REPOSITORY_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline underline-offset-4"
-          >
-            {copy.settings.source} ↗
-          </a>
-        </p>
-      </section>
+          <ButtonAnchor href={REPOSITORY_URL} variant="ghost" size="sm">
+            {copy.settings.source}
+          </ButtonAnchor>
+        </div>
+      </Section>
+
+      <ConfirmDialog
+        open={clearing}
+        title={copy.settings.clearTitle}
+        body={copy.settings.clearConfirm}
+        confirmLabel={copy.settings.clearYes}
+        cancelLabel={copy.settings.clearNo}
+        tone="danger"
+        onConfirm={clearAll}
+        onCancel={() => setClearing(false)}
+      />
     </div>
   );
 }

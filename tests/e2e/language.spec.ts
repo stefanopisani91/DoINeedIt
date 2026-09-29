@@ -41,6 +41,9 @@ test.describe('English interface', () => {
     await expect(page.locator('html')).toHaveAttribute('lang', 'it');
     await page.reload();
     await expect(page.getByRole('heading', { name: 'Impostazioni' })).toBeVisible();
+    // Every page has its own title; the home keeps the full one.
+    await expect(page).toHaveTitle('Impostazioni · DoINeedIt');
+    await page.getByRole('link', { name: 'I miei oggetti' }).click();
     await expect(page).toHaveTitle('DoINeedIt · Ti serve davvero?');
 
     // Items evaluated in one language read in the other.

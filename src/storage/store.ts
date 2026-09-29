@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Item } from './types';
+import type { Decision, Item } from './types';
 
 export const STORAGE_KEY = 'doineedit:v1';
 export const STORAGE_VERSION = 2;
@@ -13,6 +13,10 @@ interface ItemsState {
   clear: () => void;
   /** Adds items that are not already present; returns how many were added. */
   merge: (items: Item[]) => number;
+  /** Records what happened after the verdict; null removes it. Never touches updatedAt. */
+  setDecision: (id: string, decision: Decision | null) => void;
+  /** Saves the note, trimmed; an empty note removes it. Never touches updatedAt. */
+  setNote: (id: string, note: string) => void;
 }
 
 /** Brings a state persisted by an older version up to date. */
@@ -51,6 +55,27 @@ export const useItemsStore = create<ItemsState>()(
         }
         return fresh.length;
       },
+      setDecision: (id, decision) =>
+        set((state) => ({
+          items: state.items.map((item) => {
+            if (item.id !== id) return item;
+            const next = { ...item };
+            if (decision) next.decision = decision;
+            else delete next.decision;
+            return next;
+          }),
+        })),
+      setNote: (id, note) =>
+        set((state) => ({
+          items: state.items.map((item) => {
+            if (item.id !== id) return item;
+            const trimmed = note.trim();
+            const next = { ...item };
+            if (trimmed) next.note = trimmed;
+            else delete next.note;
+            return next;
+          }),
+        })),
     }),
     {
       name: STORAGE_KEY,
