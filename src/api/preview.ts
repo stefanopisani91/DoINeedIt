@@ -2,7 +2,7 @@ import type { PreviewResponse } from '../../netlify/edge-functions/preview.ts';
 
 export type PreviewOutcome = PreviewResponse | { ok: false; reason: 'network' };
 
-const CLIENT_TIMEOUT_MS = 12_000;
+const CLIENT_TIMEOUT_MS = 30_000;
 
 /** Asks the preview function for title, image and price; never throws. */
 export async function fetchPreview(url: string, signal?: AbortSignal): Promise<PreviewOutcome> {

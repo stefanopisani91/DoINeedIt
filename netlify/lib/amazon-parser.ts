@@ -181,6 +181,7 @@ function findPrice(html: string): ProductPrice | null {
 const BLOCKED_MARKERS = [
   /id="captchacharacters"/i,
   /\/errors\/validateCaptcha/i,
+  /\/errors_page\/validateCaptcha/i,
   /<title>[^<]*Robot Check/i,
   /<title>[^<]*Bot Check/i,
   /api-services-support@amazon\.com/i,

@@ -1,21 +1,21 @@
 import { isAmazonHost, isShortLinkHost, parseLink } from '../../src/lib/amazon-url.ts';
 import { parseAmazonHtml, type ParsedProduct } from '../lib/amazon-parser.ts';
+import { parseOpenGraphHtml } from '../lib/og-parser.ts';
+import { fetchPage, isPublicUrl, type FetchedPage } from '../lib/fetch-page.ts';
 
 /**
- * GET /api/preview?url=<amazon link>
+ * GET /api/preview?url=<product link>
  *
  * Reads the public product page once, the way any link preview does, and
  * returns title, image and price. Nothing is stored.
  *
- * This runs as an edge function on purpose: Amazon answers requests coming
- * from the usual serverless (AWS) address ranges with a captcha page, while
- * the edge network gets the real page. If a captcha still shows up, the
- * client falls back to manual entry.
+ * Amazon pages go through the dedicated parser; any other shop through its
+ * Open Graph meta tags. This runs as an edge function on purpose: Amazon
+ * answers requests coming from the usual serverless (AWS) address ranges
+ * with a captcha page, while the edge network gets the real page. If a
+ * captcha still shows up, the client falls back to manual entry.
  */
 
-const MAX_REDIRECTS = 3;
-const TIMEOUT_MS = 8_000;
-const MAX_BODY_BYTES = 2 * 1024 * 1024;
 /** Amazon serves a captcha page now and then even to the edge; a fresh attempt usually gets through. */
 const CAPTCHA_ATTEMPTS = 3;
 
@@ -28,16 +28,33 @@ const ACCEPT_LANGUAGE: Record<string, string> = {
   com: 'en-US,en;q=0.9',
 };
 
+export interface PreviewProduct extends ParsedProduct {
+  /** Canonical product page, or the page that was read. */
+  url: string;
+  asin: string | null;
+  marketplace: string | null;
+  /** The shop the page belongs to, e.g. "amazon.it" or "mediaworld.it". */
+  site: string;
+}
+
+export type PreviewFailure =
+  'invalid-url' | 'unsupported' | 'blocked' | 'not-found' | 'unparsable' | 'unreachable';
+
 export type PreviewResponse =
-  | {
-      ok: true;
-      product: ParsedProduct & { url: string; asin: string | null; marketplace: string | null };
-    }
-  | {
-      ok: false;
-      reason:
-        'invalid-url' | 'unsupported' | 'blocked' | 'not-found' | 'unparsable' | 'unreachable';
-    };
+  | { ok: true; product: PreviewProduct }
+  | { ok: false; reason: PreviewFailure }
+  /** The link is (or leads to) an Amazon wish list, which has its own import. */
+  | { ok: false; reason: 'wishlist'; url: string };
+
+const STATUS: Record<PreviewFailure | 'wishlist', number> = {
+  'invalid-url': 400,
+  unsupported: 400,
+  wishlist: 400,
+  'not-found': 404,
+  blocked: 503,
+  unparsable: 502,
+  unreachable: 502,
+};
 
 function json(body: PreviewResponse, status = 200, cacheable = false): Response {
   return new Response(JSON.stringify(body), {
@@ -49,130 +66,124 @@ function json(body: PreviewResponse, status = 200, cacheable = false): Response 
   });
 }
 
-function browserHeaders(marketplace: string | null): HeadersInit {
-  return {
-    'user-agent':
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-    accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-    'accept-language': ACCEPT_LANGUAGE[marketplace ?? ''] ?? 'en-US,en;q=0.9',
-    'upgrade-insecure-requests': '1',
-  };
-}
-
-async function readBody(response: Response): Promise<string> {
-  const reader = response.body?.getReader();
-  if (!reader) return await response.text();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done || !value) break;
-    chunks.push(value);
-    total += value.byteLength;
-    if (total >= MAX_BODY_BYTES) {
-      await reader.cancel();
-      break;
-    }
+export function siteOf(url: string): string {
+  try {
+    return new URL(url).hostname.toLowerCase().replace(/^www\./, '');
+  } catch {
+    return '';
   }
-  const merged = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    merged.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return new TextDecoder('utf-8').decode(merged);
-}
-
-/** Follows redirects manually so the function never fetches a host outside Amazon. */
-async function fetchAmazonPage(startUrl: string, marketplace: string | null) {
-  let current = new URL(startUrl);
-  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
-    if (!isAmazonHost(current.hostname) && !isShortLinkHost(current.hostname)) {
-      return { kind: 'unsupported' as const };
-    }
-    const response = await fetch(current, {
-      headers: browserHeaders(marketplace),
-      redirect: 'manual',
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-    });
-    if (response.status >= 300 && response.status < 400) {
-      const location = response.headers.get('location');
-      await response.body?.cancel();
-      if (!location) return { kind: 'unreachable' as const };
-      current = new URL(location, current);
-      continue;
-    }
-    return { kind: 'page' as const, url: current.toString(), status: response.status, response };
-  }
-  return { kind: 'unreachable' as const };
 }
 
 type LoadOutcome =
-  | { kind: 'product'; page: { url: string }; parsed: { product: ParsedProduct } }
+  | { kind: 'product'; url: string; product: ParsedProduct }
+  | { kind: 'wishlist'; url: string }
   | { kind: 'unsupported' | 'unreachable' | 'not-found' | 'blocked' | 'unparsable' };
 
-/** One attempt: fetch the page (following Amazon-only redirects) and parse it. */
-async function loadProduct(startUrl: string, marketplace: string | null): Promise<LoadOutcome> {
-  let page: Awaited<ReturnType<typeof fetchAmazonPage>>;
+function statusOutcome(page: FetchedPage): LoadOutcome | null {
+  if (page.kind !== 'page') return { kind: page.kind };
+  if (page.status === 404 || page.status === 410) return { kind: 'not-found' };
+  if (page.status === 503) return { kind: 'blocked' };
+  if (page.status >= 400) return { kind: 'unreachable' };
+  return null;
+}
+
+/** One attempt at an Amazon page: follow Amazon-only redirects, then parse. */
+async function loadAmazon(startUrl: string, marketplace: string | null): Promise<LoadOutcome> {
+  let page: FetchedPage;
   try {
-    page = await fetchAmazonPage(startUrl, marketplace);
+    page = await fetchPage(startUrl, {
+      allow: (url) => isAmazonHost(url.hostname) || isShortLinkHost(url.hostname),
+      acceptLanguage: ACCEPT_LANGUAGE[marketplace ?? ''] ?? 'en-US,en;q=0.9',
+      // The Amazon shorteners sometimes redirect from inside a page; product
+      // pages never do, and their scripts must not be mistaken for one.
+      followClientRedirects: (url) => isShortLinkHost(url.hostname),
+    });
   } catch {
     return { kind: 'unreachable' };
   }
-  if (page.kind !== 'page') return { kind: page.kind };
-  if (page.status === 404) return { kind: 'not-found' };
-  if (page.status === 503) return { kind: 'blocked' };
-  if (page.status >= 400) return { kind: 'unreachable' };
+  const early = statusOutcome(page);
+  if (early || page.kind !== 'page') return early ?? { kind: 'unreachable' };
+  if (parseLink(page.url).kind === 'wishlist') return { kind: 'wishlist', url: page.url };
 
-  const parsed = parseAmazonHtml(await readBody(page.response));
+  const parsed = parseAmazonHtml(page.html);
   if (!parsed.ok) return { kind: parsed.reason };
-  return { kind: 'product', page: { url: page.url }, parsed };
+  return { kind: 'product', url: page.url, product: parsed.product };
+}
+
+/** Any other shop: public hosts only, HTML only, Open Graph tags, in the person's language. */
+async function loadStore(startUrl: string, acceptLanguage: string): Promise<LoadOutcome> {
+  let page: FetchedPage;
+  try {
+    page = await fetchPage(startUrl, { allow: isPublicUrl, acceptLanguage });
+  } catch {
+    return { kind: 'unreachable' };
+  }
+  const early = statusOutcome(page);
+  if (early || page.kind !== 'page') return early ?? { kind: 'unreachable' };
+  if (!/text\/html|application\/xhtml\+xml/i.test(page.contentType)) return { kind: 'unparsable' };
+  // A shop link that lands on Amazon is an Amazon product after all.
+  if (isAmazonHost(new URL(page.url).hostname)) {
+    if (parseLink(page.url).kind === 'wishlist') return { kind: 'wishlist', url: page.url };
+    const amazon = parseAmazonHtml(page.html);
+    if (amazon.ok) return { kind: 'product', url: page.url, product: amazon.product };
+  }
+  const parsed = parseOpenGraphHtml(page.html, page.url);
+  if (!parsed.ok) return { kind: parsed.reason };
+  const { title, imageUrl, price } = parsed.product;
+  return { kind: 'product', url: page.url, product: { title, imageUrl, price } };
 }
 
 export default async function handler(request: Request): Promise<Response> {
   if (request.method !== 'GET') return json({ ok: false, reason: 'invalid-url' }, 405);
   const target = new URL(request.url).searchParams.get('url') ?? '';
   const link = parseLink(target);
-  if (link.kind === 'invalid' || link.kind === 'other') {
-    return json(
-      { ok: false, reason: link.kind === 'invalid' ? 'invalid-url' : 'unsupported' },
-      400,
-    );
+  if (link.kind === 'invalid') return json({ ok: false, reason: 'invalid-url' }, 400);
+  if (link.kind === 'wishlist') {
+    return json({ ok: false, reason: 'wishlist', url: link.canonicalUrl }, STATUS.wishlist);
   }
-  if (link.kind === 'wishlist') return json({ ok: false, reason: 'unsupported' }, 400);
 
-  const marketplace =
-    link.kind === 'product' || link.kind === 'amazon-other' ? link.marketplace : null;
-  const startUrl = link.kind === 'product' ? link.canonicalUrl : link.url;
+  let outcome: LoadOutcome;
+  if (link.kind === 'other') {
+    const acceptLanguage = request.headers.get('accept-language') || 'en-US,en;q=0.9';
+    outcome = await loadStore(link.url, acceptLanguage);
+  } else {
+    const marketplace =
+      link.kind === 'product' || link.kind === 'amazon-other' ? link.marketplace : null;
+    const startUrl = link.kind === 'product' ? link.canonicalUrl : link.url;
+    outcome = { kind: 'blocked' };
+    for (let attempt = 0; attempt < CAPTCHA_ATTEMPTS && outcome.kind === 'blocked'; attempt++) {
+      outcome = await loadAmazon(startUrl, marketplace);
+    }
+  }
 
-  let outcome: Awaited<ReturnType<typeof loadProduct>> = { kind: 'blocked' };
-  for (let attempt = 0; attempt < CAPTCHA_ATTEMPTS && outcome.kind === 'blocked'; attempt++) {
-    outcome = await loadProduct(startUrl, marketplace);
+  if (outcome.kind === 'wishlist') {
+    const list = parseLink(outcome.url);
+    const url = list.kind === 'wishlist' ? list.canonicalUrl : outcome.url;
+    return json({ ok: false, reason: 'wishlist', url }, STATUS.wishlist);
   }
   if (outcome.kind !== 'product') {
-    const status =
-      outcome.kind === 'unsupported'
-        ? 400
-        : outcome.kind === 'not-found'
-          ? 404
-          : outcome.kind === 'blocked'
-            ? 503
-            : 502;
-    return json({ ok: false, reason: outcome.kind }, status);
+    return json({ ok: false, reason: outcome.kind }, STATUS[outcome.kind]);
   }
-  const { page, parsed } = outcome;
 
   // The final URL may reveal the ASIN of a short link.
-  const finalLink = parseLink(page.url);
+  const finalLink = parseLink(outcome.url);
   const resolved = finalLink.kind === 'product' ? finalLink : link.kind === 'product' ? link : null;
+  const marketplace =
+    resolved?.marketplace ??
+    (finalLink.kind === 'amazon-other'
+      ? finalLink.marketplace
+      : link.kind === 'amazon-other'
+        ? link.marketplace
+        : null);
   return json(
     {
       ok: true,
       product: {
-        ...parsed.product,
-        url: resolved?.canonicalUrl ?? page.url,
+        ...outcome.product,
+        url: resolved?.canonicalUrl ?? outcome.url,
         asin: resolved?.asin ?? null,
-        marketplace: resolved?.marketplace ?? marketplace,
+        marketplace,
+        site: siteOf(resolved?.canonicalUrl ?? outcome.url),
       },
     },
     200,
