@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" role="img" aria-label="Scarpe da corsa">
+  <rect width="200" height="200" rx="24" fill="#dbeafe"/>
+  <path d="M30 128c20-4 34-14 46-34 8 8 20 12 34 10l38 14c14 5 22 12 22 22H36c-6 0-8-6-6-12z" fill="#1d4ed8"/>
+  <path d="M30 140h140v8H36c-6 0-8-4-6-8z" fill="#1e3a8a"/>
+  <path d="M84 104l12 8M96 98l12 8M108 94l12 8" stroke="#bfdbfe" stroke-width="5" stroke-linecap="round"/>
+</svg>

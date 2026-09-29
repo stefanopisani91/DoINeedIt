@@ -1,0 +1,114 @@
+import { useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { it } from '@/i18n/it';
+import { shareUrl } from '@/lib/share';
+import { useDraftStore } from '@/storage/draft';
+import { selectItem, useItemsStore } from '@/storage/store';
+import { Button, ButtonLink } from '../components/Button';
+import { buttonClass } from '../components/button-styles';
+import { Notice } from '../components/Notice';
+import { ResultView } from '../components/ResultView';
+
+export function ItemDetailPage() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const item = useItemsStore(selectItem(id));
+  const upsert = useItemsStore((state) => state.upsert);
+  const remove = useItemsStore((state) => state.remove);
+  const setDraft = useDraftStore((state) => state.setDraft);
+  const [copied, setCopied] = useState(false);
+  const [note, setNote] = useState(item?.note ?? '');
+
+  if (!item) {
+    return (
+      <div className="space-y-4">
+        <Notice tone="warning">{it.result.notFound}</Notice>
+        <ButtonLink to="/">{it.notFound.back}</ButtonLink>
+      </div>
+    );
+  }
+
+  const copyLink = async () => {
+    const url = shareUrl(item);
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      window.prompt(it.result.actions.share, url);
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const reevaluate = () => {
+    setDraft({
+      itemId: item.id,
+      createdAt: item.createdAt,
+      source: item.source,
+      title: item.title,
+      category: item.category,
+      ...(item.imageUrl ? { imageUrl: item.imageUrl } : {}),
+      ...(item.price ? { price: item.price } : {}),
+    });
+    navigate('/evaluate');
+  };
+
+  const saveNote = () => {
+    const trimmed = note.trim();
+    if ((item.note ?? '') === trimmed) return;
+    const next = { ...item, updatedAt: new Date().toISOString() };
+    if (trimmed) next.note = trimmed;
+    else delete next.note;
+    upsert(next);
+  };
+
+  const onDelete = () => {
+    if (!window.confirm(it.result.actions.deleteConfirm)) return;
+    remove(item.id);
+    navigate('/', { replace: true });
+  };
+
+  return (
+    <div className="space-y-6">
+      <ResultView item={item} />
+
+      <section className="rounded-3xl bg-white p-6 ring-1 ring-stone-200 dark:bg-stone-900 dark:ring-stone-800">
+        <label
+          htmlFor="note"
+          className="mb-2 block text-sm font-semibold uppercase tracking-wide text-stone-500 dark:text-stone-400"
+        >
+          {it.result.noteLabel}
+        </label>
+        <textarea
+          id="note"
+          rows={2}
+          maxLength={2000}
+          value={note}
+          onChange={(event) => setNote(event.target.value)}
+          onBlur={saveNote}
+          placeholder={it.result.notePlaceholder}
+          className="w-full rounded-xl border border-stone-300 bg-white px-3 py-2 text-base placeholder:text-stone-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 dark:border-stone-700 dark:bg-stone-950"
+        />
+      </section>
+
+      <div className="flex flex-wrap gap-3">
+        <Button onClick={reevaluate}>{it.result.actions.reevaluate}</Button>
+        <Button variant="secondary" onClick={copyLink} aria-live="polite">
+          {copied ? it.result.actions.shared : it.result.actions.share}
+        </Button>
+        {item.source.url && (
+          <a
+            href={item.source.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={buttonClass('secondary')}
+          >
+            {it.result.actions.open} ↗
+          </a>
+        )}
+        <Button variant="danger" onClick={onDelete} className="ml-auto">
+          {it.result.actions.delete}
+        </Button>
+      </div>
+    </div>
+  );
+}

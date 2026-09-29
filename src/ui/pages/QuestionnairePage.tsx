@@ -1,0 +1,128 @@
+import { useCallback, useMemo, useState } from 'react';
+import { Navigate, useNavigate } from 'react-router-dom';
+import {
+  ENGINE_VERSION,
+  applyAnswer,
+  evaluate,
+  nextQuestion,
+  remainingUpperBound,
+  undoLastAnswer,
+  type Answer,
+  type FlowState,
+} from '@/engine';
+import { QUESTIONS } from '@/data/questions';
+import { it } from '@/i18n/it';
+import { newId } from '@/lib/format';
+import { useDraftStore } from '@/storage/draft';
+import { useItemsStore } from '@/storage/store';
+import type { Item } from '@/storage/types';
+import { Button } from '../components/Button';
+import { Notice } from '../components/Notice';
+import { QuestionCard } from '../components/QuestionCard';
+
+export function QuestionnairePage() {
+  const navigate = useNavigate();
+  const draft = useDraftStore((state) => state.draft);
+  const clearDraft = useDraftStore((state) => state.clearDraft);
+  const upsert = useItemsStore((state) => state.upsert);
+  const [flow, setFlow] = useState<FlowState>(() => ({
+    category: draft?.category ?? 'other',
+    answers: {},
+    askedOrder: [],
+  }));
+
+  const question = useMemo(() => nextQuestion(QUESTIONS, flow), [flow]);
+  const answered = flow.askedOrder.length;
+  const maxTotal = answered + remainingUpperBound(QUESTIONS, flow);
+
+  const finish = useCallback(
+    (state: FlowState) => {
+      if (!draft) return;
+      const now = new Date().toISOString();
+      const id = draft.itemId ?? newId();
+      const item: Item = {
+        id,
+        createdAt: draft.createdAt ?? now,
+        updatedAt: now,
+        source: draft.source,
+        title: draft.title,
+        category: draft.category,
+        answers: state.answers,
+        askedOrder: state.askedOrder,
+        result: evaluate(QUESTIONS, draft.category, state.answers),
+        engineVersion: ENGINE_VERSION,
+        ...(draft.imageUrl ? { imageUrl: draft.imageUrl } : {}),
+        ...(draft.price ? { price: draft.price } : {}),
+      };
+      upsert(item);
+      clearDraft();
+      navigate(`/items/${id}`, { replace: true });
+    },
+    [draft, upsert, clearDraft, navigate],
+  );
+
+  const onAnswer = useCallback(
+    (answer: Answer) => {
+      if (!question) return;
+      const next = applyAnswer(flow, question.id, answer);
+      if (nextQuestion(QUESTIONS, next) === null) finish(next);
+      else setFlow(next);
+    },
+    [flow, question, finish],
+  );
+
+  if (!draft) {
+    return (
+      <div className="space-y-4">
+        <Notice tone="warning">{it.questionnaire.missingDraft}</Notice>
+        <Button onClick={() => navigate('/')}>{it.common.back}</Button>
+      </div>
+    );
+  }
+
+  if (!question) return <Navigate to="/" replace />;
+
+  return (
+    <div className="space-y-5">
+      <header>
+        <p className="truncate text-sm text-stone-500 dark:text-stone-400">{draft.title}</p>
+        <div className="mt-2 flex items-center justify-between text-sm">
+          <span className="font-medium">{it.questionnaire.progress(answered + 1, maxTotal)}</span>
+          <span className="text-stone-500 dark:text-stone-400">
+            {it.questionnaire.stageHint[question.stage]}
+          </span>
+        </div>
+        <div
+          className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-stone-200 dark:bg-stone-800"
+          aria-hidden="true"
+        >
+          <div
+            className="h-full rounded-full bg-brand-600 transition-[width] duration-500"
+            style={{ width: `${Math.round(((answered + 1) / (maxTotal + 1)) * 100)}%` }}
+          />
+        </div>
+      </header>
+
+      <QuestionCard question={question} onAnswer={onAnswer} />
+
+      <div className="flex justify-between">
+        <Button
+          variant="ghost"
+          disabled={answered === 0}
+          onClick={() => setFlow(undoLastAnswer(QUESTIONS, flow))}
+        >
+          ← {it.questionnaire.back}
+        </Button>
+        <Button
+          variant="ghost"
+          onClick={() => {
+            clearDraft();
+            navigate('/');
+          }}
+        >
+          {it.questionnaire.cancel}
+        </Button>
+      </div>
+    </div>
+  );
+}

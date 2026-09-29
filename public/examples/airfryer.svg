@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" role="img" aria-label="Friggitrice ad aria">
+  <rect width="200" height="200" rx="24" fill="#fef3c7"/>
+  <rect x="55" y="40" width="90" height="120" rx="22" fill="#b45309"/>
+  <rect x="67" y="52" width="66" height="40" rx="10" fill="#fde68a"/>
+  <rect x="67" y="104" width="66" height="40" rx="8" fill="#92400e"/>
+  <rect x="88" y="118" width="24" height="10" rx="5" fill="#fef3c7"/>
+  <circle cx="100" cy="72" r="8" fill="#b45309"/>
+</svg>
