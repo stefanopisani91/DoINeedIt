@@ -1,10 +1,11 @@
-import { it } from '@/i18n/it';
+import { useCopy } from '@/i18n';
 
 export function PrivacyPage() {
+  const copy = useCopy();
   return (
     <article className="prose-sm max-w-none space-y-6">
-      <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{it.privacy.title}</h1>
-      {it.privacy.sections.map((section) => (
+      <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{copy.privacy.title}</h1>
+      {copy.privacy.sections.map((section) => (
         <section
           key={section.heading}
           className="rounded-3xl bg-white p-6 ring-1 ring-stone-200 dark:bg-stone-900 dark:ring-stone-800"

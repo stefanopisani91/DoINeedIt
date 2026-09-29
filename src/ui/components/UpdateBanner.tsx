@@ -1,5 +1,5 @@
 import { useRegisterSW } from 'virtual:pwa-register/react';
-import { it } from '@/i18n/it';
+import { useCopy } from '@/i18n';
 import { Button } from './Button';
 
 /**
@@ -8,6 +8,7 @@ import { Button } from './Button';
  * answers in memory and an unexpected reload would lose them.
  */
 export function UpdateBanner() {
+  const copy = useCopy();
   const {
     needRefresh: [needRefresh, setNeedRefresh],
     updateServiceWorker,
@@ -30,12 +31,12 @@ export function UpdateBanner() {
       {needRefresh && (
         <div className="border-t border-stone-200 bg-white/95 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur dark:border-stone-800 dark:bg-stone-900/95">
           <div className="mx-auto flex w-full max-w-3xl flex-wrap items-center justify-between gap-3">
-            <p className="text-sm">{it.update.available}</p>
+            <p className="text-sm">{copy.update.available}</p>
             <div className="flex gap-2">
               <Button variant="ghost" onClick={() => setNeedRefresh(false)}>
-                {it.update.later}
+                {copy.update.later}
               </Button>
-              <Button onClick={() => void updateServiceWorker(true)}>{it.update.reload}</Button>
+              <Button onClick={() => void updateServiceWorker(true)}>{copy.update.reload}</Button>
             </div>
           </div>
         </div>

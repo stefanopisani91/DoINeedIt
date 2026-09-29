@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import type { Answer, Question } from '@/engine';
-import { it } from '@/i18n/it';
+import { useCopy } from '@/i18n';
 
 interface QuestionCardProps {
   question: Question;
@@ -29,6 +29,7 @@ const OPTIONS: Array<{ answer: Answer; key: string; className: string }> = [
 ];
 
 export function QuestionCard({ question, onAnswer }: QuestionCardProps) {
+  const copy = useCopy();
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.metaKey || event.ctrlKey || event.altKey) return;
@@ -64,7 +65,7 @@ export function QuestionCard({ question, onAnswer }: QuestionCardProps) {
             onClick={() => onAnswer(option.answer)}
             className={`min-h-16 rounded-2xl text-lg font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-stone-950 ${option.className}`}
           >
-            {it.answers[option.answer]}
+            {copy.answers[option.answer]}
             <span
               className="ml-2 hidden text-xs font-normal opacity-60 sm:inline"
               aria-hidden="true"
@@ -75,7 +76,7 @@ export function QuestionCard({ question, onAnswer }: QuestionCardProps) {
         ))}
       </div>
       <p className="mt-4 hidden text-xs text-stone-500 sm:block dark:text-stone-400">
-        {it.questionnaire.shortcuts}
+        {copy.questionnaire.shortcuts}
       </p>
     </section>
   );

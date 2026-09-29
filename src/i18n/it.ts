@@ -1,3 +1,6 @@
+import type { QuestionId } from '@/data/questions';
+import type { CategoryId } from '@/engine';
+
 /** "l’8%", "l’80%", "l’11%", but "il 18%" and "il 100%": the article follows the sound of the number. */
 function percentWithArticle(percent: number): string {
   const vowelSound =
@@ -5,11 +8,36 @@ function percentWithArticle(percent: number): string {
   return `${vowelSound ? 'l’' : 'il '}${percent}%`;
 }
 
-/** All user-facing copy, in Italian. Kept in one place to make a second language easy. */
+export interface QuestionCopy {
+  text: string;
+  hint?: string;
+}
+
+export interface CategoryCopy {
+  label: string;
+  description: string;
+}
+
+export interface ExampleCopy {
+  title: string;
+  note?: string;
+}
+
+/**
+ * All user-facing copy, in Italian. Every other language must have exactly
+ * this shape: `Copy` is derived from this object, so the type checker
+ * reports a missing or extra key in `en.ts`.
+ */
 export const it = {
+  lang: 'it',
+  /** Locale for dates and prices. */
+  locale: 'it-IT',
   app: {
     name: 'DoINeedIt',
     tagline: 'Ti serve davvero?',
+    documentTitle: 'DoINeedIt · Ti serve davvero?',
+    description:
+      'Ti serve davvero? Incolla il link di un prodotto, rispondi a poche domande e scopri quanto ti serve quell’acquisto.',
     nav: { label: 'Navigazione principale', home: 'I miei oggetti', settings: 'Impostazioni' },
     footer: 'I tuoi dati restano nel tuo browser. Nessun account, nessun tracciamento.',
     privacyLink: 'Privacy',
@@ -56,13 +84,122 @@ export const it = {
       'Segna quanto avresti speso: a fine anno la somma sorprende.',
     ],
   },
+  categories: {
+    tech: { label: 'Tecnologia', description: 'Telefoni, cuffie, PC, gadget' },
+    home: { label: 'Casa', description: 'Arredo, pulizia, giardino' },
+    kitchen: { label: 'Cucina', description: 'Elettrodomestici e utensili' },
+    clothing: { label: 'Abbigliamento', description: 'Vestiti, scarpe, accessori' },
+    sport: { label: 'Sport e hobby', description: 'Attrezzatura, fai da te, giochi' },
+    media: { label: 'Libri e media', description: 'Libri, videogiochi, film' },
+    health: { label: 'Salute e bellezza', description: 'Cura personale, integratori' },
+    other: { label: 'Altro', description: 'Tutto il resto' },
+  } satisfies Record<CategoryId, CategoryCopy>,
+  questions: {
+    own_similar: {
+      text: 'Hai già qualcosa che svolge la stessa funzione?',
+      hint: 'Conta anche se è di un’altra marca, più vecchio o meno bello.',
+    },
+    own_works: {
+      text: 'Quello che hai già funziona ancora bene?',
+      hint: 'Se ti basta per l’uso che ne fai, rispondi sì.',
+    },
+    new_different: {
+      text: 'Il nuovo prodotto fa qualcosa di davvero diverso che ti serve?',
+      hint: 'Una funzione concreta che userai, non una scheda tecnica migliore.',
+    },
+    concrete_need: {
+      text: 'Risponde a un’esigenza concreta che hai già adesso?',
+      hint: 'Non a un “potrebbe servire un giorno”.',
+    },
+    weekly_use: { text: 'Lo useresti almeno una volta a settimana nei prossimi tre mesi?' },
+    problem_soon: {
+      text: 'Se non lo comprassi, avresti un problema concreto entro un mese?',
+      hint: 'Un problema reale: tempo perso, soldi spesi, qualcosa che non puoi fare.',
+    },
+    impulse_today: {
+      text: 'Hai deciso di comprarlo oggi, sull’onda di un’offerta, di un video o di un consiglio?',
+    },
+    budget_sacrifice: {
+      text: 'Per pagarlo dovresti intaccare i risparmi, pagare a rate o rinunciare a qualcosa che avevi già programmato?',
+      hint: 'Se lo paghi con i soldi del mese senza pensarci, rispondi no.',
+    },
+    tech_unsupported: {
+      text: 'Il dispositivo che usi oggi è rotto, insopportabilmente lento o senza più aggiornamenti?',
+    },
+    tech_daily_diff: { text: 'La differenza rispetto a quello che hai la noteresti ogni giorno?' },
+    tech_extra_costs: {
+      text: 'Per usarlo davvero servono accessori, abbonamenti o cavi da comprare a parte?',
+    },
+    home_daily_annoy: { text: 'Risolve un fastidio che senti quasi ogni giorno in casa?' },
+    home_prettier: { text: 'È una versione più bella o più nuova di qualcosa che possiedi già?' },
+    home_special_only: { text: 'Lo useresti solo in occasioni speciali o quando hai ospiti?' },
+    kitchen_frequency: { text: 'Prepari quel tipo di piatto almeno ogni due settimane?' },
+    kitchen_same_result: {
+      text: 'Puoi ottenere lo stesso risultato con un attrezzo che hai già?',
+      hint: 'Una pentola, un frullatore, il forno che hai già.',
+    },
+    kitchen_reach: {
+      text: 'Avrebbe un posto a portata di mano, senza finire in fondo a un armadio?',
+    },
+    clothing_similar: {
+      text: 'Hai già un capo simile, per lo stesso uso o dello stesso colore?',
+    },
+    clothing_combos: { text: 'Lo abbineresti con almeno tre cose che hai già nell’armadio?' },
+    clothing_one_event: { text: 'Lo compri per una sola occasione?' },
+    sport_consistent: { text: 'Pratichi quell’attività con costanza da almeno tre mesi?' },
+    sport_limit: {
+      text: 'L’attrezzatura che hai ti limita davvero nei risultati o nella sicurezza?',
+    },
+    sport_try_first: { text: 'Puoi provarlo o noleggiarlo prima di comprarlo?' },
+    media_backlog: {
+      text: 'Hai già più di tre libri, giochi o film comprati e non ancora finiti?',
+    },
+    media_library: { text: 'Lo trovi in biblioteca o in un abbonamento che paghi già?' },
+    media_this_month: { text: 'Lo inizieresti entro un mese?' },
+    health_professional: {
+      text: 'Te l’ha consigliato un medico, un farmacista o un altro professionista?',
+    },
+    health_finishing: { text: 'Hai già un prodotto simile che stai ancora finendo?' },
+    health_reviews: {
+      text: 'Hai letto pareri indipendenti, non solo la descrizione del venditore?',
+    },
+    local_cheaper: {
+      text: 'C’è un negozio nella tua città che vende un prodotto molto simile a un prezzo molto inferiore?',
+    },
+    borrow_rent_used: { text: 'Potresti prenderlo in prestito, noleggiarlo o comprarlo usato?' },
+    replace_broken: { text: 'Sostituisce qualcosa di rotto, perso o che non puoi più usare?' },
+    budget_month_spent: {
+      text: 'Questo mese hai già fatto altri acquisti non indispensabili?',
+      hint: 'Conta tutto quello che non era una necessità.',
+    },
+    budget_regret: {
+      text: 'Se tra un mese rivedessi questa spesa sull’estratto conto, ti darebbe fastidio?',
+    },
+    wanted_before: { text: 'Lo desideravi già da più di due settimane?' },
+    full_price_later: { text: 'Lo compreresti lo stesso a prezzo pieno tra due mesi?' },
+    wait_30_days: { text: 'Se aspettassi 30 giorni, ne sentiresti la mancanza?' },
+    recommend_friend: { text: 'Lo consiglieresti a un amico nella tua identica situazione?' },
+    pay_30_more: { text: 'Lo compreresti anche se costasse il 30% in più?' },
+  } satisfies Record<QuestionId, QuestionCopy>,
+  examples: {
+    headphones: {
+      title: 'Cuffie Bluetooth over-ear con cancellazione del rumore',
+      note: 'Viste in un video, le mie funzionano ancora benissimo.',
+    },
+    airfryer: { title: 'Friggitrice ad aria 5,5 L con doppio cestello' },
+    shoes: {
+      title: 'Scarpe da corsa ammortizzate, ricambio del modello che uso',
+      note: 'Le vecchie hanno 900 km e mi fanno male al ginocchio.',
+    },
+  } satisfies Record<'headphones' | 'airfryer' | 'shoes', ExampleCopy>,
   home: {
-    title: 'Incolla il link di un prodotto Amazon',
+    title: 'Incolla il link di un prodotto',
     subtitle:
-      'Poche domande sincere e un punteggio che dice quanto ti serve davvero. Senza account, senza registrazione.',
+      'Amazon o qualsiasi altro negozio. Poche domande sincere e un punteggio che dice quanto ti serve davvero. Senza account, senza registrazione.',
     placeholder: 'https://www.amazon.it/dp/…',
     submit: 'Valuta',
     manualLink: 'Non hai un link? Inserisci il prodotto a mano',
+    wishlistLink: 'Hai una lista dei desideri Amazon? Importala',
     invalidLink: 'Non riconosco questo link. Incolla l’indirizzo completo del prodotto.',
     listTitle: 'I miei oggetti',
     empty: {
@@ -71,22 +208,33 @@ export const it = {
       examples: 'Carica tre esempi',
     },
     count: (n: number) => (n === 1 ? '1 oggetto' : `${n} oggetti`),
+    queue: {
+      title: 'Da valutare',
+      body: 'Prodotti presi da una lista dei desideri. Ognuno passa dalle domande, uno alla volta.',
+      evaluate: 'Valuta',
+      discard: 'Scarta',
+      fromList: (list: string) => `Dalla lista «${list}»`,
+    },
   },
   newItem: {
     title: 'Di cosa si tratta?',
     loading: 'Leggo la pagina del prodotto…',
-    previewOk: 'Ho letto titolo, foto e prezzo dalla pagina. Correggi quello che vuoi.',
+    previewOk: (site: string) =>
+      `Ho letto titolo, foto e prezzo da ${site}. Correggi quello che vuoi.`,
+    fromQueue: 'Preso dalla tua lista dei desideri. Controlla i dati e scegli la categoria.',
     reasons: {
       blocked: 'Amazon non ha permesso di leggere la pagina questa volta. Inserisci i dati a mano.',
       'not-found': 'La pagina del prodotto non esiste più. Puoi inserire i dati a mano.',
       unsupported:
-        'Per ora leggo in automatico solo le pagine dei singoli prodotti Amazon. Inserisci i dati a mano.',
-      unparsable: 'Non sono riuscito a leggere la pagina. Inserisci i dati a mano.',
-      unreachable: 'Amazon non ha risposto in tempo. Inserisci i dati a mano o riprova.',
+        'Questo link non porta a una pagina di prodotto che so leggere. Inserisci i dati a mano.',
+      unparsable: 'Non ho trovato titolo e foto nella pagina. Inserisci i dati a mano.',
+      unreachable: 'Il negozio non ha risposto in tempo. Inserisci i dati a mano o riprova.',
       network: 'Sembra che tu sia offline. Puoi comunque inserire i dati a mano.',
       'invalid-url': 'Il link non è valido. Inserisci i dati a mano.',
+      wishlist: 'Questo link è una lista dei desideri Amazon, non un prodotto.',
       none: 'Descrivi il prodotto: bastano poche parole.',
     },
+    importWishlist: 'Importa la lista',
     retry: 'Riprova la lettura automatica',
     fields: {
       title: 'Nome del prodotto',
@@ -100,6 +248,40 @@ export const it = {
     titleRequired: 'Scrivi almeno il nome del prodotto.',
     start: 'Inizia le domande',
     back: 'Annulla',
+  },
+  wishlist: {
+    title: 'Importa una lista dei desideri',
+    intro:
+      'Incolla il link di una lista dei desideri Amazon pubblica: scegli tu quali prodotti valutare, uno alla volta, con le stesse domande.',
+    placeholder: 'https://www.amazon.it/hz/wishlist/ls/…',
+    submit: 'Leggi la lista',
+    invalidLink: 'Non riconosco questo link. Incolla l’indirizzo di una lista dei desideri Amazon.',
+    loading: 'Leggo la lista…',
+    found: (n: number, list: string | null) =>
+      `${n === 1 ? 'Un prodotto' : `${n} prodotti`}${list ? ` nella lista «${list}»` : ' nella lista'}.`,
+    partial: 'Amazon mostra solo i primi prodotti di una lista: gli altri vanno aggiunti a mano.',
+    products: 'Prodotti della lista',
+    selectAll: 'Seleziona tutti',
+    deselectAll: 'Deseleziona tutti',
+    add: (n: number) =>
+      n === 1 ? 'Aggiungi 1 prodotto da valutare' : `Aggiungi ${n} prodotti da valutare`,
+    selectOne: 'Seleziona almeno un prodotto.',
+    alreadyQueued: 'già da valutare',
+    alreadyEvaluated: 'già valutato',
+    noPrice: 'prezzo non disponibile',
+    reasons: {
+      blocked:
+        'Amazon non ha permesso di leggere la lista questa volta. Riprova tra poco, oppure inserisci i prodotti a mano.',
+      private: 'La lista è privata o non è più disponibile: posso leggere solo le liste pubbliche.',
+      'not-found': 'La lista non esiste o è stata eliminata.',
+      unparsable: 'Non sono riuscito a leggere i prodotti della lista.',
+      unreachable: 'Amazon non ha risposto in tempo. Riprova.',
+      unsupported: 'Il link non porta a una lista dei desideri Amazon.',
+      'invalid-url': 'Il link non è valido.',
+      network: 'Sembra che tu sia offline. Riprova quando torni in rete.',
+    },
+    retry: 'Riprova',
+    back: 'Torna all’inizio',
   },
   questionnaire: {
     progress: (n: number, max: number) => `Domanda ${n} · al massimo ${max}`,
@@ -157,6 +339,12 @@ export const it = {
   },
   settings: {
     title: 'Impostazioni',
+    languageTitle: 'Lingua',
+    languageBody:
+      'L’interfaccia segue la lingua del browser. Qui puoi sceglierla tu: è un’impostazione di questo browser e non viene esportata. Le valutazioni già fatte si leggono nella lingua scelta.',
+    languageLabel: 'Lingua dell’interfaccia',
+    languageAuto: 'Come il browser',
+    languageNames: { it: 'Italiano', en: 'English' },
     dataTitle: 'I tuoi dati',
     dataBody:
       'Tutto quello che valuti resta in questo browser. Per portarlo su un altro dispositivo esporta un file e importalo lì.',
@@ -196,15 +384,15 @@ export const it = {
     sections: [
       {
         heading: 'Cosa salvo',
-        body: 'I prodotti che valuti, le risposte che dai, il punteggio, le note e il budget mensile. Tutto resta nella memoria del tuo browser (localStorage), su questo dispositivo.',
+        body: 'I prodotti che valuti, le risposte che dai, il punteggio, le note, i prodotti in attesa di valutazione, il budget mensile e la lingua. Tutto resta nella memoria del tuo browser (localStorage), su questo dispositivo.',
       },
       {
         heading: 'Cosa non faccio',
         body: 'Nessun account, nessun cookie di profilazione, nessuno strumento di analisi, nessun invio dei tuoi dati a un server mio o di terzi.',
       },
       {
-        heading: 'Il link Amazon',
-        body: 'Quando incolli un link, una piccola funzione sul server legge una sola volta la pagina pubblica del prodotto per ricavare titolo, foto e prezzo, come fa l’anteprima di un link in una chat. Il link non viene memorizzato.',
+        heading: 'Il link del prodotto',
+        body: 'Quando incolli un link, una piccola funzione sul server legge una sola volta la pagina pubblica del prodotto, di Amazon o di un altro negozio, per ricavare titolo, foto e prezzo, come fa l’anteprima di un link in una chat. Lo stesso vale per una lista dei desideri pubblica: ne legge i prodotti visibili e basta. Il link non viene memorizzato.',
       },
       {
         heading: 'I link condivisi',
@@ -218,6 +406,6 @@ export const it = {
   },
   notFound: { title: 'Pagina non trovata', back: 'Torna all’inizio' },
   common: { back: 'Indietro', close: 'Chiudi', loading: 'Un momento…' },
-} as const;
+};
 
 export type Copy = typeof it;

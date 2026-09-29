@@ -1,5 +1,5 @@
 import { DIMENSIONS, type Dimension } from '@/engine';
-import { it } from '@/i18n/it';
+import { useCopy } from '@/i18n';
 
 interface DimensionBarsProps {
   dimensions: Record<Dimension, number | null>;
@@ -12,6 +12,7 @@ function barColor(value: number): string {
 }
 
 export function DimensionBars({ dimensions }: DimensionBarsProps) {
+  const copy = useCopy();
   return (
     <ul className="space-y-3">
       {DIMENSIONS.map((dimension) => {
@@ -21,9 +22,9 @@ export function DimensionBars({ dimensions }: DimensionBarsProps) {
           <li key={dimension}>
             <div className="mb-1 flex items-baseline justify-between gap-3">
               <span className="text-sm font-medium">
-                {it.dimensions[dimension]}
+                {copy.dimensions[dimension]}
                 <span className="ml-2 hidden text-xs font-normal text-stone-500 sm:inline dark:text-stone-400">
-                  {it.dimensionHints[dimension]}
+                  {copy.dimensionHints[dimension]}
                 </span>
               </span>
               <span className="text-sm tabular-nums text-stone-600 dark:text-stone-300">
@@ -36,7 +37,7 @@ export function DimensionBars({ dimensions }: DimensionBarsProps) {
               aria-valuemin={0}
               aria-valuemax={100}
               aria-valuenow={value ?? 0}
-              aria-label={it.dimensions[dimension]}
+              aria-label={copy.dimensions[dimension]}
             >
               {value !== null && (
                 <div
@@ -46,7 +47,9 @@ export function DimensionBars({ dimensions }: DimensionBarsProps) {
               )}
             </div>
             {value === null && (
-              <p className="mt-1 text-xs text-stone-500 dark:text-stone-400">{it.result.noData}</p>
+              <p className="mt-1 text-xs text-stone-500 dark:text-stone-400">
+                {copy.result.noData}
+              </p>
             )}
           </li>
         );

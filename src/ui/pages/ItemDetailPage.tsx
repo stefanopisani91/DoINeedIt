@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { it } from '@/i18n/it';
+import { useCopy } from '@/i18n';
 import { shareUrl } from '@/lib/share';
 import { useDraftStore } from '@/storage/draft';
 import { useSettingsStore } from '@/storage/settings';
@@ -11,6 +11,7 @@ import { Notice } from '../components/Notice';
 import { ResultView } from '../components/ResultView';
 
 export function ItemDetailPage() {
+  const copy = useCopy();
   const { id } = useParams();
   const navigate = useNavigate();
   const item = useItemsStore(selectItem(id));
@@ -24,8 +25,8 @@ export function ItemDetailPage() {
   if (!item) {
     return (
       <div className="space-y-4">
-        <Notice tone="warning">{it.result.notFound}</Notice>
-        <ButtonLink to="/">{it.notFound.back}</ButtonLink>
+        <Notice tone="warning">{copy.result.notFound}</Notice>
+        <ButtonLink to="/">{copy.notFound.back}</ButtonLink>
       </div>
     );
   }
@@ -35,7 +36,7 @@ export function ItemDetailPage() {
     try {
       await navigator.clipboard.writeText(url);
     } catch {
-      window.prompt(it.result.actions.share, url);
+      window.prompt(copy.result.actions.share, url);
     }
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -64,20 +65,20 @@ export function ItemDetailPage() {
   };
 
   const onDelete = () => {
-    if (!window.confirm(it.result.actions.deleteConfirm)) return;
+    if (!window.confirm(copy.result.actions.deleteConfirm)) return;
     remove(item.id);
     navigate('/', { replace: true });
   };
 
   const budgetNotice = item.result.budget ? null : !budget ? (
     <Notice>
-      {it.result.budgetMissing.setBudget}{' '}
+      {copy.result.budgetMissing.setBudget}{' '}
       <Link to="/settings" className="font-semibold underline underline-offset-4">
-        {it.result.budgetMissing.link}
+        {copy.result.budgetMissing.link}
       </Link>
     </Notice>
   ) : !item.price ? (
-    <Notice>{it.result.budgetMissing.addPrice}</Notice>
+    <Notice>{copy.result.budgetMissing.addPrice}</Notice>
   ) : null;
 
   return (
@@ -90,7 +91,7 @@ export function ItemDetailPage() {
           htmlFor="note"
           className="mb-2 block text-sm font-semibold uppercase tracking-wide text-stone-500 dark:text-stone-400"
         >
-          {it.result.noteLabel}
+          {copy.result.noteLabel}
         </label>
         <textarea
           id="note"
@@ -99,15 +100,15 @@ export function ItemDetailPage() {
           value={note}
           onChange={(event) => setNote(event.target.value)}
           onBlur={saveNote}
-          placeholder={it.result.notePlaceholder}
+          placeholder={copy.result.notePlaceholder}
           className="w-full rounded-xl border border-stone-300 bg-white px-3 py-2 text-base placeholder:text-stone-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 dark:border-stone-700 dark:bg-stone-950"
         />
       </section>
 
       <div className="flex flex-wrap gap-3">
-        <Button onClick={reevaluate}>{it.result.actions.reevaluate}</Button>
+        <Button onClick={reevaluate}>{copy.result.actions.reevaluate}</Button>
         <Button variant="secondary" onClick={copyLink} aria-live="polite">
-          {copied ? it.result.actions.shared : it.result.actions.share}
+          {copied ? copy.result.actions.shared : copy.result.actions.share}
         </Button>
         {item.source.url && (
           <a
@@ -116,11 +117,11 @@ export function ItemDetailPage() {
             rel="noopener noreferrer"
             className={buttonClass('secondary')}
           >
-            {it.result.actions.open} ↗
+            {copy.result.actions.open} ↗
           </a>
         )}
         <Button variant="danger" onClick={onDelete} className="ml-auto">
-          {it.result.actions.delete}
+          {copy.result.actions.delete}
         </Button>
       </div>
     </div>

@@ -1,17 +1,18 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import type { CategoryId } from '@/engine';
-import { CATEGORIES } from '@/data/categories';
-import { it } from '@/i18n/it';
+import { useCopy } from '@/i18n';
 import { fetchPreview, type PreviewOutcome } from '@/api/preview';
 import { parseLink } from '@/lib/amazon-url';
 import { parsePriceInput } from '@/lib/format';
 import { MAX_TITLE_LENGTH, resolveShareTarget } from '@/lib/share-target';
 import { useDraftStore } from '@/storage/draft';
+import { selectQueued, useQueueStore, type QueuedProduct } from '@/storage/queue';
 import type { Draft } from '@/storage/types';
 import { Button, ButtonLink } from '../components/Button';
 import { Notice } from '../components/Notice';
 import { ProductImage } from '../components/ProductImage';
+import { useCategories } from '../hooks';
 
 type Status = { kind: 'idle' } | { kind: 'loading' } | { kind: 'done'; outcome: PreviewOutcome };
 
@@ -26,34 +27,60 @@ export function NewItemPage() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const intent = useMemo(() => resolveShareTarget(params), [params]);
+  const queued = useQueueStore(selectQueued(params.get('queue')));
+  const link = useMemo(() => parseLink(intent.kind === 'url' ? intent.url : ''), [intent]);
 
   // A link received from the share sheet goes to the canonical /new?url=…,
-  // replacing the share URL so that "back" does not land on it again.
+  // replacing the share URL so that "back" does not land on it again. A wish
+  // list has its own page.
   useEffect(() => {
     if (intent.kind === 'redirect') {
       navigate(`/new?url=${encodeURIComponent(intent.url)}`, { replace: true });
+    } else if (link.kind === 'wishlist') {
+      navigate(`/wishlist?url=${encodeURIComponent(link.canonicalUrl)}`, { replace: true });
     }
-  }, [intent, navigate]);
+  }, [intent, link, navigate]);
 
-  if (intent.kind === 'redirect') return null;
+  if (intent.kind === 'redirect' || link.kind === 'wishlist') return null;
+  if (queued) return <NewItemForm key={queued.id} url="" initialTitle="" queued={queued} />;
   const url = intent.kind === 'url' ? intent.url : '';
   const initialTitle = intent.kind === 'manual' ? intent.title : '';
   // Remount on a different link so every piece of state starts fresh.
   return <NewItemForm key={url || initialTitle} url={url} initialTitle={initialTitle} />;
 }
 
-function NewItemForm({ url, initialTitle }: { url: string; initialTitle: string }) {
+function priceInput(amount: number, decimalSeparator: string): string {
+  return String(amount).replace('.', decimalSeparator);
+}
+
+function NewItemForm({
+  url,
+  initialTitle,
+  queued,
+}: {
+  url: string;
+  initialTitle: string;
+  queued?: QueuedProduct;
+}) {
+  const copy = useCopy();
+  const categories = useCategories();
   const navigate = useNavigate();
   const link = parseLink(url);
   const canPreview =
-    link.kind === 'product' || link.kind === 'short' || link.kind === 'amazon-other';
+    !queued &&
+    (link.kind === 'product' ||
+      link.kind === 'short' ||
+      link.kind === 'amazon-other' ||
+      link.kind === 'other');
   const setDraft = useDraftStore((state) => state.setDraft);
+  const removeQueued = useQueueStore((state) => state.remove);
+  const decimalSeparator = copy.lang === 'it' ? ',' : '.';
 
   const [status, setStatus] = useState<Status>(canPreview ? { kind: 'loading' } : { kind: 'idle' });
   const [form, setForm] = useState<FormState>({
-    title: initialTitle,
-    price: '',
-    imageUrl: '',
+    title: queued?.title ?? initialTitle,
+    price: queued?.price ? priceInput(queued.price.amount, decimalSeparator) : '',
+    imageUrl: queued?.imageUrl ?? '',
     category: 'other',
   });
   const [attempt, setAttempt] = useState(0);
@@ -71,18 +98,18 @@ function NewItemForm({ url, initialTitle }: { url: string; initialTitle: string 
           title: outcome.product.title ?? current.title,
           imageUrl: outcome.product.imageUrl ?? current.imageUrl,
           price: outcome.product.price
-            ? String(outcome.product.price.amount).replace('.', ',')
+            ? priceInput(outcome.product.price.amount, decimalSeparator)
             : current.price,
         }));
       }
     });
     return () => controller.abort();
-  }, [url, canPreview, attempt]);
+  }, [url, canPreview, attempt, decimalSeparator]);
 
   const previewCurrency =
     status.kind === 'done' && status.outcome.ok
       ? (status.outcome.product.price?.currency ?? 'EUR')
-      : 'EUR';
+      : (queued?.price?.currency ?? 'EUR');
 
   const onSubmit = (event: FormEvent) => {
     event.preventDefault();
@@ -93,20 +120,23 @@ function NewItemForm({ url, initialTitle }: { url: string; initialTitle: string 
     }
     const amount = parsePriceInput(form.price);
     const resolved = status.kind === 'done' && status.outcome.ok ? status.outcome.product : null;
+    const source = queued
+      ? queued.source
+      : {
+          url: resolved?.url ?? (link.kind === 'invalid' ? '' : link.url),
+          ...(resolved?.asin
+            ? { asin: resolved.asin }
+            : link.kind === 'product'
+              ? { asin: link.asin }
+              : {}),
+          ...(resolved?.marketplace
+            ? { marketplace: resolved.marketplace }
+            : link.kind === 'product' || link.kind === 'amazon-other'
+              ? { marketplace: link.marketplace }
+              : {}),
+        };
     const draft: Draft = {
-      source: {
-        url: resolved?.url ?? (link.kind === 'invalid' ? '' : link.url),
-        ...(resolved?.asin
-          ? { asin: resolved.asin }
-          : link.kind === 'product'
-            ? { asin: link.asin }
-            : {}),
-        ...(resolved?.marketplace
-          ? { marketplace: resolved.marketplace }
-          : link.kind === 'product' || link.kind === 'amazon-other'
-            ? { marketplace: link.marketplace }
-            : {}),
-      },
+      source,
       title,
       category: form.category,
       ...(form.imageUrl.trim() && /^(https?:\/\/|\/)/.test(form.imageUrl.trim())
@@ -115,26 +145,43 @@ function NewItemForm({ url, initialTitle }: { url: string; initialTitle: string 
       ...(amount !== null && amount > 0 ? { price: { amount, currency: previewCurrency } } : {}),
     };
     setDraft(draft);
+    if (queued) removeQueued(queued.id);
     navigate('/evaluate');
   };
 
   const notice = (() => {
-    if (status.kind === 'loading') return <Notice tone="info">{it.newItem.loading}</Notice>;
+    if (queued) return <Notice tone="info">{copy.newItem.fromQueue}</Notice>;
+    if (status.kind === 'loading') return <Notice tone="info">{copy.newItem.loading}</Notice>;
     if (status.kind === 'done') {
-      if (status.outcome.ok) return <Notice tone="success">{it.newItem.previewOk}</Notice>;
-      return <Notice tone="warning">{it.newItem.reasons[status.outcome.reason]}</Notice>;
+      const { outcome } = status;
+      if (outcome.ok) {
+        return <Notice tone="success">{copy.newItem.previewOk(outcome.product.site)}</Notice>;
+      }
+      if (outcome.reason === 'wishlist') {
+        return (
+          <Notice tone="warning">
+            {copy.newItem.reasons.wishlist}{' '}
+            <Link
+              to={`/wishlist?url=${encodeURIComponent(outcome.url)}`}
+              className="font-semibold underline underline-offset-4"
+            >
+              {copy.newItem.importWishlist}
+            </Link>
+          </Notice>
+        );
+      }
+      return <Notice tone="warning">{copy.newItem.reasons[outcome.reason]}</Notice>;
     }
-    if (!url) return <Notice tone="info">{it.newItem.reasons.none}</Notice>;
-    if (link.kind === 'wishlist' || link.kind === 'other')
-      return <Notice tone="warning">{it.newItem.reasons.unsupported}</Notice>;
-    return null;
+    if (!url) return <Notice tone="info">{copy.newItem.reasons.none}</Notice>;
+    return <Notice tone="warning">{copy.newItem.reasons.unsupported}</Notice>;
   })();
 
-  const failed = status.kind === 'done' && !status.outcome.ok;
+  const failed =
+    status.kind === 'done' && !status.outcome.ok && status.outcome.reason !== 'wishlist';
 
   return (
     <form onSubmit={onSubmit} noValidate className="space-y-6">
-      <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{it.newItem.title}</h1>
+      <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{copy.newItem.title}</h1>
       {notice}
       {failed && (
         <Button
@@ -144,7 +191,7 @@ function NewItemForm({ url, initialTitle }: { url: string; initialTitle: string 
             setAttempt((n) => n + 1);
           }}
         >
-          {it.newItem.retry}
+          {copy.newItem.retry}
         </Button>
       )}
 
@@ -156,9 +203,9 @@ function NewItemForm({ url, initialTitle }: { url: string; initialTitle: string 
         />
         <div className="space-y-4">
           <Field
-            label={it.newItem.fields.title}
+            label={copy.newItem.fields.title}
             id="title"
-            error={titleError ? it.newItem.titleRequired : null}
+            error={titleError ? copy.newItem.titleRequired : null}
           >
             <input
               id="title"
@@ -170,31 +217,31 @@ function NewItemForm({ url, initialTitle }: { url: string; initialTitle: string 
                 setForm({ ...form, title: event.target.value });
                 setTitleError(false);
               }}
-              placeholder={it.newItem.fields.titlePlaceholder}
+              placeholder={copy.newItem.fields.titlePlaceholder}
               className={inputClass}
               disabled={status.kind === 'loading'}
             />
           </Field>
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label={it.newItem.fields.price} id="price">
+            <Field label={copy.newItem.fields.price} id="price">
               <input
                 id="price"
                 type="text"
                 inputMode="decimal"
                 value={form.price}
                 onChange={(event) => setForm({ ...form, price: event.target.value })}
-                placeholder={it.newItem.fields.pricePlaceholder}
+                placeholder={copy.newItem.fields.pricePlaceholder}
                 className={inputClass}
                 disabled={status.kind === 'loading'}
               />
             </Field>
-            <Field label={it.newItem.fields.imageUrl} id="image">
+            <Field label={copy.newItem.fields.imageUrl} id="image">
               <input
                 id="image"
                 type="url"
                 value={form.imageUrl}
                 onChange={(event) => setForm({ ...form, imageUrl: event.target.value })}
-                placeholder={it.newItem.fields.imagePlaceholder}
+                placeholder={copy.newItem.fields.imagePlaceholder}
                 className={inputClass}
                 disabled={status.kind === 'loading'}
               />
@@ -205,10 +252,10 @@ function NewItemForm({ url, initialTitle }: { url: string; initialTitle: string 
 
       <fieldset className="rounded-3xl bg-white p-6 ring-1 ring-stone-200 dark:bg-stone-900 dark:ring-stone-800">
         <legend className="px-1 text-sm font-semibold uppercase tracking-wide text-stone-500 dark:text-stone-400">
-          {it.newItem.fields.category}
+          {copy.newItem.fields.category}
         </legend>
         <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {CATEGORIES.map((category) => {
+          {categories.map((category) => {
             const selected = form.category === category.id;
             return (
               <label
@@ -242,10 +289,10 @@ function NewItemForm({ url, initialTitle }: { url: string; initialTitle: string 
 
       <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
         <ButtonLink to="/" variant="ghost">
-          {it.newItem.back}
+          {copy.newItem.back}
         </ButtonLink>
         <Button type="submit" size="lg" disabled={status.kind === 'loading'}>
-          {it.newItem.start}
+          {copy.newItem.start}
         </Button>
       </div>
     </form>

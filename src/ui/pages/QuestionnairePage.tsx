@@ -11,8 +11,7 @@ import {
   type Answer,
   type FlowState,
 } from '@/engine';
-import { QUESTIONS } from '@/data/questions';
-import { it } from '@/i18n/it';
+import { useCopy } from '@/i18n';
 import { newId } from '@/lib/format';
 import { useDraftStore } from '@/storage/draft';
 import { useSettingsStore } from '@/storage/settings';
@@ -21,8 +20,11 @@ import type { Item } from '@/storage/types';
 import { Button } from '../components/Button';
 import { Notice } from '../components/Notice';
 import { QuestionCard } from '../components/QuestionCard';
+import { useQuestions } from '../hooks';
 
 export function QuestionnairePage() {
+  const copy = useCopy();
+  const QUESTIONS = useQuestions();
   const navigate = useNavigate();
   const draft = useDraftStore((state) => state.draft);
   const clearDraft = useDraftStore((state) => state.clearDraft);
@@ -38,7 +40,7 @@ export function QuestionnairePage() {
     };
   });
 
-  const question = useMemo(() => nextQuestion(QUESTIONS, flow), [flow]);
+  const question = useMemo(() => nextQuestion(QUESTIONS, flow), [QUESTIONS, flow]);
   const answered = flow.askedOrder.length;
   const maxTotal = answered + remainingUpperBound(QUESTIONS, flow);
 
@@ -66,7 +68,7 @@ export function QuestionnairePage() {
       clearDraft();
       navigate(`/items/${id}`, { replace: true });
     },
-    [draft, budget, upsert, clearDraft, navigate],
+    [QUESTIONS, draft, budget, upsert, clearDraft, navigate],
   );
 
   const onAnswer = useCallback(
@@ -76,14 +78,14 @@ export function QuestionnairePage() {
       if (nextQuestion(QUESTIONS, next) === null) finish(next);
       else setFlow(next);
     },
-    [flow, question, finish],
+    [QUESTIONS, flow, question, finish],
   );
 
   if (!draft) {
     return (
       <div className="space-y-4">
-        <Notice tone="warning">{it.questionnaire.missingDraft}</Notice>
-        <Button onClick={() => navigate('/')}>{it.common.back}</Button>
+        <Notice tone="warning">{copy.questionnaire.missingDraft}</Notice>
+        <Button onClick={() => navigate('/')}>{copy.common.back}</Button>
       </div>
     );
   }
@@ -95,9 +97,9 @@ export function QuestionnairePage() {
       <header>
         <p className="truncate text-sm text-stone-500 dark:text-stone-400">{draft.title}</p>
         <div className="mt-2 flex items-center justify-between text-sm">
-          <span className="font-medium">{it.questionnaire.progress(answered + 1, maxTotal)}</span>
+          <span className="font-medium">{copy.questionnaire.progress(answered + 1, maxTotal)}</span>
           <span className="text-stone-500 dark:text-stone-400">
-            {it.questionnaire.stageHint[question.stage]}
+            {copy.questionnaire.stageHint[question.stage]}
           </span>
         </div>
         <div
@@ -119,7 +121,7 @@ export function QuestionnairePage() {
           disabled={answered === 0}
           onClick={() => setFlow(undoLastAnswer(QUESTIONS, flow))}
         >
-          ← {it.questionnaire.back}
+          ← {copy.questionnaire.back}
         </Button>
         <Button
           variant="ghost"
@@ -128,7 +130,7 @@ export function QuestionnairePage() {
             navigate('/');
           }}
         >
-          {it.questionnaire.cancel}
+          {copy.questionnaire.cancel}
         </Button>
       </div>
     </div>

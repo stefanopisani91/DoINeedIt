@@ -1,4 +1,5 @@
 import type { Verdict } from '@/engine';
+import { useCopy } from '@/i18n';
 import { verdictStyle } from '../verdict';
 
 interface ScoreRingProps {
@@ -13,7 +14,7 @@ export function ScoreRing({ score, verdict, size = 168, label }: ScoreRingProps)
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
   const offset = circumference * (1 - score / 100);
-  const style = verdictStyle(verdict);
+  const style = verdictStyle(verdict, useCopy());
 
   return (
     <div

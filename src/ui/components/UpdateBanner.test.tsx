@@ -3,6 +3,7 @@ import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { useSettingsStore } from '@/storage/settings';
 import { UpdateBanner } from './UpdateBanner';
 
 const updateServiceWorker = vi.fn(() => Promise.resolve());
@@ -22,7 +23,11 @@ vi.mock('virtual:pwa-register/react', () => ({
 }));
 
 describe('UpdateBanner', () => {
-  beforeEach(() => updateServiceWorker.mockClear());
+  beforeEach(() => {
+    updateServiceWorker.mockClear();
+    // The test runner's browser asks for English; the banner is checked in Italian.
+    useSettingsStore.getState().setLanguage('it');
+  });
 
   it('keeps an empty live region until a new version is ready, then announces it', () => {
     render(<UpdateBanner />);

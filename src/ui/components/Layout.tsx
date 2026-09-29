@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Link, NavLink } from 'react-router-dom';
-import { it } from '@/i18n/it';
+import { useCopy } from '@/i18n';
 import { UpdateBanner } from './UpdateBanner';
 
 const navClass = ({ isActive }: { isActive: boolean }) =>
@@ -11,32 +11,33 @@ const navClass = ({ isActive }: { isActive: boolean }) =>
   }`;
 
 export function Layout({ children }: { children: ReactNode }) {
+  const copy = useCopy();
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="sticky top-0 z-10 border-b border-stone-200/80 bg-stone-50/90 backdrop-blur dark:border-stone-800 dark:bg-stone-950/90">
         <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3 px-4 py-3">
-          <Link to="/" className="flex items-center gap-2" aria-label={it.app.name}>
+          <Link to="/" className="flex items-center gap-2" aria-label={copy.app.name}>
             <Logo />
-            <span className="text-lg font-bold tracking-tight">{it.app.name}</span>
+            <span className="text-lg font-bold tracking-tight">{copy.app.name}</span>
           </Link>
-          <nav className="flex items-center gap-1" aria-label={it.app.nav.label}>
+          <nav className="flex items-center gap-1" aria-label={copy.app.nav.label}>
             <NavLink to="/" end className={navClass}>
-              {it.app.nav.home}
+              {copy.app.nav.home}
             </NavLink>
             <NavLink to="/settings" className={navClass}>
-              {it.app.nav.settings}
+              {copy.app.nav.settings}
             </NavLink>
           </nav>
         </div>
       </header>
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-6 sm:py-8">{children}</main>
       <footer className="mx-auto w-full max-w-3xl px-4 py-6 text-center text-xs text-stone-500 dark:text-stone-400">
-        {it.app.footer}{' '}
+        {copy.app.footer}{' '}
         <Link
           to="/privacy"
           className="underline underline-offset-2 hover:text-stone-700 dark:hover:text-stone-200"
         >
-          {it.app.privacyLink}
+          {copy.app.privacyLink}
         </Link>
       </footer>
       <UpdateBanner />

@@ -1,10 +1,14 @@
 import { ENGINE_VERSION, budgetShare, evaluate, type Answers, type CategoryId } from '@/engine';
+import type { Copy, ExampleCopy } from '@/i18n/it';
+import { it } from '@/i18n/it';
 import type { Item, Price } from '@/storage/types';
-import { QUESTIONS } from './questions';
+import { questionsIn } from './questions';
+
+type ExampleKey = keyof Copy['examples'];
 
 interface ExampleSeed {
+  key: ExampleKey;
   id: string;
-  title: string;
   category: CategoryId;
   imageUrl: string;
   price: Price;
@@ -12,7 +16,6 @@ interface ExampleSeed {
   asin: string;
   daysAgo: number;
   answers: Answers;
-  note?: string;
 }
 
 /** The monthly budget the example items were evaluated against. */
@@ -20,8 +23,8 @@ const EXAMPLE_BUDGET: Price = { amount: 400, currency: 'EUR' };
 
 const SEEDS: ExampleSeed[] = [
   {
+    key: 'headphones',
     id: 'example-headphones',
-    title: 'Cuffie Bluetooth over-ear con cancellazione del rumore',
     category: 'tech',
     imageUrl: '/examples/headphones.svg',
     price: { amount: 249, currency: 'EUR' },
@@ -38,11 +41,10 @@ const SEEDS: ExampleSeed[] = [
       impulse_today: 'yes',
       budget_sacrifice: 'yes',
     },
-    note: 'Viste in un video, le mie funzionano ancora benissimo.',
   },
   {
+    key: 'airfryer',
     id: 'example-airfryer',
-    title: 'Friggitrice ad aria 5,5 L con doppio cestello',
     category: 'kitchen',
     imageUrl: '/examples/airfryer.svg',
     price: { amount: 89.99, currency: 'EUR' },
@@ -72,8 +74,8 @@ const SEEDS: ExampleSeed[] = [
     },
   },
   {
+    key: 'shoes',
     id: 'example-shoes',
-    title: 'Scarpe da corsa ammortizzate, ricambio del modello che uso',
     category: 'sport',
     imageUrl: '/examples/shoes.svg',
     price: { amount: 119.9, currency: 'EUR' },
@@ -90,7 +92,6 @@ const SEEDS: ExampleSeed[] = [
       impulse_today: 'no',
       budget_sacrifice: 'no',
     },
-    note: 'Le vecchie hanno 900 km e mi fanno male al ginocchio.',
   },
 ];
 
@@ -100,15 +101,16 @@ function isoDaysAgo(days: number): string {
   return date.toISOString();
 }
 
-function toItem(seed: ExampleSeed): Item {
+function toItem(seed: ExampleSeed, copy: Copy): Item {
   const askedOrder = Object.keys(seed.answers);
   const timestamp = isoDaysAgo(seed.daysAgo);
+  const text: ExampleCopy = copy.examples[seed.key];
   const item: Item = {
     id: seed.id,
     createdAt: timestamp,
     updatedAt: timestamp,
     source: { url: seed.url, asin: seed.asin, marketplace: 'it' },
-    title: seed.title,
+    title: text.title,
     imageUrl: seed.imageUrl,
     price: seed.price,
     category: seed.category,
@@ -116,16 +118,21 @@ function toItem(seed: ExampleSeed): Item {
     askedOrder,
     budget: EXAMPLE_BUDGET,
     result: evaluate(
-      QUESTIONS,
+      questionsIn(copy),
       seed.category,
       seed.answers,
       budgetShare(seed.price, EXAMPLE_BUDGET),
     ),
     engineVersion: ENGINE_VERSION,
   };
-  if (seed.note) item.note = seed.note;
+  if (text.note) item.note = text.note;
   return item;
 }
 
-/** Demo items, so the app never looks empty when someone tries it for the first time. */
-export const EXAMPLE_ITEMS: Item[] = SEEDS.map(toItem);
+/** Demo items in the given language, so the app never looks empty when someone tries it. */
+export function exampleItems(copy: Copy): Item[] {
+  return SEEDS.map((seed) => toItem(seed, copy));
+}
+
+/** The demo items in Italian, the app's first language. */
+export const EXAMPLE_ITEMS: Item[] = exampleItems(it);

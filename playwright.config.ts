@@ -15,6 +15,9 @@ export default defineConfig({
   use: {
     baseURL: `http://localhost:${port}`,
     trace: 'retain-on-failure',
+    // The interface follows the browser language: the suite runs in Italian
+    // and switches to English only where it tests the English interface.
+    locale: 'it-IT',
   },
   projects: [
     { name: 'mobile', use: { ...devices['Pixel 7'], launchOptions } },

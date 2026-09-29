@@ -1,4 +1,6 @@
 import type { CategoryId } from '@/engine';
+import type { Copy } from '@/i18n/it';
+import { it } from '@/i18n/it';
 
 export interface Category {
   id: CategoryId;
@@ -7,32 +9,28 @@ export interface Category {
   emoji: string;
 }
 
-export const CATEGORIES: Category[] = [
-  { id: 'tech', label: 'Tecnologia', description: 'Telefoni, cuffie, PC, gadget', emoji: '🎧' },
-  { id: 'home', label: 'Casa', description: 'Arredo, pulizia, giardino', emoji: '🛋️' },
-  { id: 'kitchen', label: 'Cucina', description: 'Elettrodomestici e utensili', emoji: '🍳' },
-  {
-    id: 'clothing',
-    label: 'Abbigliamento',
-    description: 'Vestiti, scarpe, accessori',
-    emoji: '👟',
-  },
-  {
-    id: 'sport',
-    label: 'Sport e hobby',
-    description: 'Attrezzatura, fai da te, giochi',
-    emoji: '🏋️',
-  },
-  { id: 'media', label: 'Libri e media', description: 'Libri, videogiochi, film', emoji: '📚' },
-  {
-    id: 'health',
-    label: 'Salute e bellezza',
-    description: 'Cura personale, integratori',
-    emoji: '🧴',
-  },
-  { id: 'other', label: 'Altro', description: 'Tutto il resto', emoji: '📦' },
-];
+/** The categories in the order they are offered; their texts come from the copy. */
+export const CATEGORY_EMOJI: Record<CategoryId, string> = {
+  tech: '🎧',
+  home: '🛋️',
+  kitchen: '🍳',
+  clothing: '👟',
+  sport: '🏋️',
+  media: '📚',
+  health: '🧴',
+  other: '📦',
+};
 
-export function categoryById(id: string): Category {
-  return CATEGORIES.find((c) => c.id === id) ?? CATEGORIES[CATEGORIES.length - 1]!;
+export const CATEGORY_IDS = Object.keys(CATEGORY_EMOJI) as CategoryId[];
+
+export function categoriesIn(copy: Copy): Category[] {
+  return CATEGORY_IDS.map((id) => ({ id, emoji: CATEGORY_EMOJI[id], ...copy.categories[id] }));
 }
+
+export function categoryById(id: string, copy: Copy): Category {
+  const categories = categoriesIn(copy);
+  return categories.find((c) => c.id === id) ?? categories[categories.length - 1]!;
+}
+
+/** The categories in Italian, the app's first language. */
+export const CATEGORIES: Category[] = categoriesIn(it);

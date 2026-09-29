@@ -1,28 +1,34 @@
-import type { Question } from '@/engine';
+import type { Answer, CategoryId, Dimension, Polarity, Question, Stage, Weight } from '@/engine';
+import type { Copy, QuestionCopy } from '@/i18n/it';
+import { it } from '@/i18n/it';
 
 /**
  * The question bank. Order matters: within a stage, questions are asked in
  * this order (category-specific ones first), and a follow-up should be
  * declared right after the question it depends on.
  *
+ * The texts live in the copy files (`src/i18n`), one per language; here are
+ * ids, weights and rules, which the engine reads and which never change with
+ * the language.
+ *
  * polarity 'need'  → "yes" makes the purchase more necessary
  * polarity 'skip'  → "yes" makes the purchase less necessary
  */
-export const QUESTIONS: Question[] = [
+interface QuestionDefinition {
+  readonly id: string;
+  readonly dimension: Dimension;
+  readonly stage: Stage;
+  readonly weight: Weight;
+  readonly polarity: Polarity;
+  readonly categories?: readonly CategoryId[];
+  readonly showIf?: { readonly questionId: string; readonly answers: readonly Answer[] };
+}
+
+const DEFINITIONS = [
   // ───────────── Stage 1: core questions, asked to everyone ─────────────
-  {
-    id: 'own_similar',
-    text: 'Hai già qualcosa che svolge la stessa funzione?',
-    hint: 'Conta anche se è di un’altra marca, più vecchio o meno bello.',
-    dimension: 'utility',
-    stage: 1,
-    weight: 3,
-    polarity: 'skip',
-  },
+  { id: 'own_similar', dimension: 'utility', stage: 1, weight: 3, polarity: 'skip' },
   {
     id: 'own_works',
-    text: 'Quello che hai già funziona ancora bene?',
-    hint: 'Se ti basta per l’uso che ne fai, rispondi sì.',
     dimension: 'utility',
     stage: 1,
     weight: 3,
@@ -31,62 +37,21 @@ export const QUESTIONS: Question[] = [
   },
   {
     id: 'new_different',
-    text: 'Il nuovo prodotto fa qualcosa di davvero diverso che ti serve?',
-    hint: 'Una funzione concreta che userai, non una scheda tecnica migliore.',
     dimension: 'utility',
     stage: 1,
     weight: 2,
     polarity: 'need',
     showIf: { questionId: 'own_similar', answers: ['yes'] },
   },
-  {
-    id: 'concrete_need',
-    text: 'Risponde a un’esigenza concreta che hai già adesso?',
-    hint: 'Non a un “potrebbe servire un giorno”.',
-    dimension: 'utility',
-    stage: 1,
-    weight: 3,
-    polarity: 'need',
-  },
-  {
-    id: 'weekly_use',
-    text: 'Lo useresti almeno una volta a settimana nei prossimi tre mesi?',
-    dimension: 'utility',
-    stage: 1,
-    weight: 2,
-    polarity: 'need',
-  },
-  {
-    id: 'problem_soon',
-    text: 'Se non lo comprassi, avresti un problema concreto entro un mese?',
-    hint: 'Un problema reale: tempo perso, soldi spesi, qualcosa che non puoi fare.',
-    dimension: 'urgency',
-    stage: 1,
-    weight: 2,
-    polarity: 'need',
-  },
-  {
-    id: 'impulse_today',
-    text: 'Hai deciso di comprarlo oggi, sull’onda di un’offerta, di un video o di un consiglio?',
-    dimension: 'impulse',
-    stage: 1,
-    weight: 2,
-    polarity: 'skip',
-  },
-  {
-    id: 'budget_sacrifice',
-    text: 'Per pagarlo dovresti intaccare i risparmi, pagare a rate o rinunciare a qualcosa che avevi già programmato?',
-    hint: 'Se lo paghi con i soldi del mese senza pensarci, rispondi no.',
-    dimension: 'budget',
-    stage: 1,
-    weight: 3,
-    polarity: 'skip',
-  },
+  { id: 'concrete_need', dimension: 'utility', stage: 1, weight: 3, polarity: 'need' },
+  { id: 'weekly_use', dimension: 'utility', stage: 1, weight: 2, polarity: 'need' },
+  { id: 'problem_soon', dimension: 'urgency', stage: 1, weight: 2, polarity: 'need' },
+  { id: 'impulse_today', dimension: 'impulse', stage: 1, weight: 2, polarity: 'skip' },
+  { id: 'budget_sacrifice', dimension: 'budget', stage: 1, weight: 3, polarity: 'skip' },
 
   // ───────────── Stage 2: category-specific deepening ─────────────
   {
     id: 'tech_unsupported',
-    text: 'Il dispositivo che usi oggi è rotto, insopportabilmente lento o senza più aggiornamenti?',
     dimension: 'urgency',
     stage: 2,
     weight: 3,
@@ -95,7 +60,6 @@ export const QUESTIONS: Question[] = [
   },
   {
     id: 'tech_daily_diff',
-    text: 'La differenza rispetto a quello che hai la noteresti ogni giorno?',
     dimension: 'utility',
     stage: 2,
     weight: 2,
@@ -104,7 +68,6 @@ export const QUESTIONS: Question[] = [
   },
   {
     id: 'tech_extra_costs',
-    text: 'Per usarlo davvero servono accessori, abbonamenti o cavi da comprare a parte?',
     dimension: 'alternatives',
     stage: 2,
     weight: 1,
@@ -113,7 +76,6 @@ export const QUESTIONS: Question[] = [
   },
   {
     id: 'home_daily_annoy',
-    text: 'Risolve un fastidio che senti quasi ogni giorno in casa?',
     dimension: 'utility',
     stage: 2,
     weight: 3,
@@ -122,7 +84,6 @@ export const QUESTIONS: Question[] = [
   },
   {
     id: 'home_prettier',
-    text: 'È una versione più bella o più nuova di qualcosa che possiedi già?',
     dimension: 'utility',
     stage: 2,
     weight: 2,
@@ -131,7 +92,6 @@ export const QUESTIONS: Question[] = [
   },
   {
     id: 'home_special_only',
-    text: 'Lo useresti solo in occasioni speciali o quando hai ospiti?',
     dimension: 'utility',
     stage: 2,
     weight: 1,
@@ -140,7 +100,6 @@ export const QUESTIONS: Question[] = [
   },
   {
     id: 'kitchen_frequency',
-    text: 'Prepari quel tipo di piatto almeno ogni due settimane?',
     dimension: 'utility',
     stage: 2,
     weight: 3,
@@ -149,8 +108,6 @@ export const QUESTIONS: Question[] = [
   },
   {
     id: 'kitchen_same_result',
-    text: 'Puoi ottenere lo stesso risultato con un attrezzo che hai già?',
-    hint: 'Una pentola, un frullatore, il forno che hai già.',
     dimension: 'alternatives',
     stage: 2,
     weight: 3,
@@ -159,7 +116,6 @@ export const QUESTIONS: Question[] = [
   },
   {
     id: 'kitchen_reach',
-    text: 'Avrebbe un posto a portata di mano, senza finire in fondo a un armadio?',
     dimension: 'utility',
     stage: 2,
     weight: 1,
@@ -168,7 +124,6 @@ export const QUESTIONS: Question[] = [
   },
   {
     id: 'clothing_similar',
-    text: 'Hai già un capo simile, per lo stesso uso o dello stesso colore?',
     dimension: 'utility',
     stage: 2,
     weight: 2,
@@ -177,7 +132,6 @@ export const QUESTIONS: Question[] = [
   },
   {
     id: 'clothing_combos',
-    text: 'Lo abbineresti con almeno tre cose che hai già nell’armadio?',
     dimension: 'utility',
     stage: 2,
     weight: 2,
@@ -186,7 +140,6 @@ export const QUESTIONS: Question[] = [
   },
   {
     id: 'clothing_one_event',
-    text: 'Lo compri per una sola occasione?',
     dimension: 'utility',
     stage: 2,
     weight: 2,
@@ -195,7 +148,6 @@ export const QUESTIONS: Question[] = [
   },
   {
     id: 'sport_consistent',
-    text: 'Pratichi quell’attività con costanza da almeno tre mesi?',
     dimension: 'utility',
     stage: 2,
     weight: 3,
@@ -204,7 +156,6 @@ export const QUESTIONS: Question[] = [
   },
   {
     id: 'sport_limit',
-    text: 'L’attrezzatura che hai ti limita davvero nei risultati o nella sicurezza?',
     dimension: 'utility',
     stage: 2,
     weight: 2,
@@ -213,7 +164,6 @@ export const QUESTIONS: Question[] = [
   },
   {
     id: 'sport_try_first',
-    text: 'Puoi provarlo o noleggiarlo prima di comprarlo?',
     dimension: 'alternatives',
     stage: 2,
     weight: 2,
@@ -222,7 +172,6 @@ export const QUESTIONS: Question[] = [
   },
   {
     id: 'media_backlog',
-    text: 'Hai già più di tre libri, giochi o film comprati e non ancora finiti?',
     dimension: 'impulse',
     stage: 2,
     weight: 2,
@@ -231,7 +180,6 @@ export const QUESTIONS: Question[] = [
   },
   {
     id: 'media_library',
-    text: 'Lo trovi in biblioteca o in un abbonamento che paghi già?',
     dimension: 'alternatives',
     stage: 2,
     weight: 3,
@@ -240,7 +188,6 @@ export const QUESTIONS: Question[] = [
   },
   {
     id: 'media_this_month',
-    text: 'Lo inizieresti entro un mese?',
     dimension: 'urgency',
     stage: 2,
     weight: 2,
@@ -249,7 +196,6 @@ export const QUESTIONS: Question[] = [
   },
   {
     id: 'health_professional',
-    text: 'Te l’ha consigliato un medico, un farmacista o un altro professionista?',
     dimension: 'utility',
     stage: 2,
     weight: 2,
@@ -258,7 +204,6 @@ export const QUESTIONS: Question[] = [
   },
   {
     id: 'health_finishing',
-    text: 'Hai già un prodotto simile che stai ancora finendo?',
     dimension: 'utility',
     stage: 2,
     weight: 2,
@@ -267,7 +212,6 @@ export const QUESTIONS: Question[] = [
   },
   {
     id: 'health_reviews',
-    text: 'Hai letto pareri indipendenti, non solo la descrizione del venditore?',
     dimension: 'alternatives',
     stage: 2,
     weight: 1,
@@ -276,91 +220,52 @@ export const QUESTIONS: Question[] = [
   },
 
   // ───────────── Stage 2: generic deepening ─────────────
-  {
-    id: 'local_cheaper',
-    text: 'C’è un negozio nella tua città che vende un prodotto molto simile a un prezzo molto inferiore?',
-    dimension: 'alternatives',
-    stage: 2,
-    weight: 2,
-    polarity: 'skip',
-  },
-  {
-    id: 'borrow_rent_used',
-    text: 'Potresti prenderlo in prestito, noleggiarlo o comprarlo usato?',
-    dimension: 'alternatives',
-    stage: 2,
-    weight: 2,
-    polarity: 'skip',
-  },
-  {
-    id: 'replace_broken',
-    text: 'Sostituisce qualcosa di rotto, perso o che non puoi più usare?',
-    dimension: 'urgency',
-    stage: 2,
-    weight: 3,
-    polarity: 'need',
-  },
-  {
-    id: 'budget_month_spent',
-    text: 'Questo mese hai già fatto altri acquisti non indispensabili?',
-    hint: 'Conta tutto quello che non era una necessità.',
-    dimension: 'budget',
-    stage: 2,
-    weight: 2,
-    polarity: 'skip',
-  },
-  {
-    id: 'budget_regret',
-    text: 'Se tra un mese rivedessi questa spesa sull’estratto conto, ti darebbe fastidio?',
-    dimension: 'budget',
-    stage: 2,
-    weight: 2,
-    polarity: 'skip',
-  },
-  {
-    id: 'wanted_before',
-    text: 'Lo desideravi già da più di due settimane?',
-    dimension: 'impulse',
-    stage: 2,
-    weight: 2,
-    polarity: 'need',
-  },
-  {
-    id: 'full_price_later',
-    text: 'Lo compreresti lo stesso a prezzo pieno tra due mesi?',
-    dimension: 'impulse',
-    stage: 2,
-    weight: 2,
-    polarity: 'need',
-  },
+  { id: 'local_cheaper', dimension: 'alternatives', stage: 2, weight: 2, polarity: 'skip' },
+  { id: 'borrow_rent_used', dimension: 'alternatives', stage: 2, weight: 2, polarity: 'skip' },
+  { id: 'replace_broken', dimension: 'urgency', stage: 2, weight: 3, polarity: 'need' },
+  { id: 'budget_month_spent', dimension: 'budget', stage: 2, weight: 2, polarity: 'skip' },
+  { id: 'budget_regret', dimension: 'budget', stage: 2, weight: 2, polarity: 'skip' },
+  { id: 'wanted_before', dimension: 'impulse', stage: 2, weight: 2, polarity: 'need' },
+  { id: 'full_price_later', dimension: 'impulse', stage: 2, weight: 2, polarity: 'need' },
 
   // ───────────── Stage 3: tie-break ─────────────
-  {
-    id: 'wait_30_days',
-    text: 'Se aspettassi 30 giorni, ne sentiresti la mancanza?',
-    dimension: 'impulse',
-    stage: 3,
-    weight: 3,
-    polarity: 'need',
-  },
-  {
-    id: 'recommend_friend',
-    text: 'Lo consiglieresti a un amico nella tua identica situazione?',
-    dimension: 'utility',
-    stage: 3,
-    weight: 2,
-    polarity: 'need',
-  },
-  {
-    id: 'pay_30_more',
-    text: 'Lo compreresti anche se costasse il 30% in più?',
-    dimension: 'utility',
-    stage: 3,
-    weight: 2,
-    polarity: 'need',
-  },
-];
+  { id: 'wait_30_days', dimension: 'impulse', stage: 3, weight: 3, polarity: 'need' },
+  { id: 'recommend_friend', dimension: 'utility', stage: 3, weight: 2, polarity: 'need' },
+  { id: 'pay_30_more', dimension: 'utility', stage: 3, weight: 2, polarity: 'need' },
+] as const satisfies readonly QuestionDefinition[];
 
-export function questionById(id: string): Question | undefined {
-  return QUESTIONS.find((q) => q.id === id);
+export type QuestionId = (typeof DEFINITIONS)[number]['id'];
+
+export const QUESTION_IDS: readonly QuestionId[] = DEFINITIONS.map((d) => d.id);
+
+/** The question bank with its texts in the given language. */
+export function questionsIn(copy: Copy): Question[] {
+  return DEFINITIONS.map((entry) => {
+    const definition: QuestionDefinition = entry;
+    const { text, hint }: QuestionCopy = copy.questions[entry.id];
+    const question: Question = {
+      id: definition.id,
+      text,
+      dimension: definition.dimension,
+      stage: definition.stage,
+      weight: definition.weight,
+      polarity: definition.polarity,
+    };
+    if (hint) question.hint = hint;
+    if (definition.categories) question.categories = [...definition.categories];
+    if (definition.showIf) {
+      question.showIf = {
+        questionId: definition.showIf.questionId,
+        answers: [...definition.showIf.answers],
+      };
+    }
+    return question;
+  });
+}
+
+/** The question bank in Italian, the app's first language. */
+export const QUESTIONS: Question[] = questionsIn(it);
+
+export function questionById(id: string, questions: Question[] = QUESTIONS): Question | undefined {
+  return questions.find((q) => q.id === id);
 }

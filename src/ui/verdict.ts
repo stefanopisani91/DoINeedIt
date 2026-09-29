@@ -1,5 +1,5 @@
 import type { Verdict } from '@/engine';
-import { it } from '@/i18n/it';
+import type { Copy } from '@/i18n';
 
 export interface VerdictStyle {
   label: string;
@@ -31,6 +31,6 @@ const STYLES: Record<Verdict, Omit<VerdictStyle, 'label' | 'short'>> = {
   },
 };
 
-export function verdictStyle(verdict: Verdict): VerdictStyle {
-  return { ...STYLES[verdict], ...it.verdict[verdict] };
+export function verdictStyle(verdict: Verdict, copy: Copy): VerdictStyle {
+  return { ...STYLES[verdict], ...copy.verdict[verdict] };
 }

@@ -2,7 +2,7 @@
 
 import { beforeEach, describe, expect, it } from 'vitest';
 import { migrateItems, useItemsStore, STORAGE_KEY } from './store';
-import { SETTINGS_KEY, useSettingsStore } from './settings';
+import { SETTINGS_KEY, migrateSettings, useSettingsStore } from './settings';
 import { buildExport, parseImport } from './export';
 import { EXAMPLE_ITEMS } from '@/data/examples';
 import type { Item } from './types';
@@ -99,5 +99,24 @@ describe('settings store', () => {
     expect(window.localStorage.getItem(SETTINGS_KEY)).toContain('300');
     useSettingsStore.getState().setBudget(null);
     expect(useSettingsStore.getState().budget).toBeNull();
+  });
+
+  it('persists the interface language, or the choice to follow the browser', () => {
+    useSettingsStore.getState().setLanguage('en');
+    expect(window.localStorage.getItem(SETTINGS_KEY)).toContain('"language":"en"');
+    useSettingsStore.getState().setLanguage(null);
+    expect(useSettingsStore.getState().language).toBeNull();
+  });
+
+  it('migrates settings stored before the language existed', () => {
+    expect(migrateSettings({ budget: { amount: 300, currency: 'EUR' } }, 1)).toEqual({
+      budget: { amount: 300, currency: 'EUR' },
+      language: null,
+    });
+    expect(migrateSettings(undefined, 1)).toEqual({ budget: null, language: null });
+    expect(migrateSettings({ budget: null, language: 'en' }, 2)).toEqual({
+      budget: null,
+      language: 'en',
+    });
   });
 });

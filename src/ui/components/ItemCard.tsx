@@ -1,13 +1,15 @@
 import { Link } from 'react-router-dom';
 import type { Item } from '@/storage/types';
 import { categoryById } from '@/data/categories';
+import { useCopy } from '@/i18n';
 import { formatDate, formatPrice } from '@/lib/format';
 import { verdictStyle } from '../verdict';
 import { ProductImage } from './ProductImage';
 
 export function ItemCard({ item }: { item: Item }) {
-  const style = verdictStyle(item.result.verdict);
-  const category = categoryById(item.category);
+  const copy = useCopy();
+  const style = verdictStyle(item.result.verdict, copy);
+  const category = categoryById(item.category, copy);
   return (
     <li>
       <Link
@@ -20,8 +22,10 @@ export function ItemCard({ item }: { item: Item }) {
           <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">
             <span aria-hidden="true">{category.emoji} </span>
             {category.label}
-            {item.price && <> · {formatPrice(item.price.amount, item.price.currency)}</>}
-            <span className="hidden sm:inline"> · {formatDate(item.updatedAt)}</span>
+            {item.price && (
+              <> · {formatPrice(item.price.amount, item.price.currency, copy.locale)}</>
+            )}
+            <span className="hidden sm:inline"> · {formatDate(item.updatedAt, copy.locale)}</span>
           </p>
         </div>
         <div className={`shrink-0 rounded-xl px-3 py-2 text-center ${style.bg}`}>

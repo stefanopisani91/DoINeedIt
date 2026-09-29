@@ -1,9 +1,9 @@
 {
   "id": "/",
-  "name": "DoINeedIt · Ti serve davvero?",
+  "name": "DoINeedIt · Do you really need it?",
   "short_name": "DoINeedIt",
-  "description": "Ti serve davvero? Incolla il link di un prodotto, rispondi a poche domande e scopri quanto ti serve quell’acquisto.",
-  "lang": "it",
+  "description": "Do you really need it? Paste a product link, answer a few questions and find out how much you actually need that purchase.",
+  "lang": "en",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
