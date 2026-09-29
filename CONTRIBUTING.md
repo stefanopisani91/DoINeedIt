@@ -9,6 +9,7 @@ npm install
 npm run dev          # Vite + funzione edge servita in locale su /api/preview (plugin in vite.config.ts)
 npm run check        # lint + format:check + typecheck + test + build: deve passare prima di ogni push
 npm run test:e2e     # Playwright; con un Chromium già installato: PLAYWRIGHT_CHROMIUM_PATH=<eseguibile>
+npm run icons        # rigenera le icone PNG da public/favicon.svg (usa il Chromium di Playwright)
 ```
 
 ## Architettura
@@ -19,6 +20,7 @@ npm run test:e2e     # Playwright; con un Chromium già installato: PLAYWRIGHT_C
 - `src/lib/amazon-url.ts` è l'unica fonte di verità per riconoscere i link Amazon; la usa anche la funzione edge.
 - `netlify/edge-functions/preview.ts` legge la pagina prodotto; `netlify/lib/amazon-parser.ts` è il parser puro (pattern sul testo, niente DOM: l'edge ha un budget CPU di pochi millisecondi), testato con fixture sintetiche. Segue i redirect solo verso host Amazon, non memorizza nulla, riprova fino a tre volte davanti a una pagina captcha e poi risponde `blocked`. Deve restare una edge function: dalle funzioni serverless classiche (AWS) Amazon risponde con un captcha, dall'edge no. Il runtime è Deno: solo API web standard e import relativi con estensione `.ts`.
 - `src/ui/`: pagine e componenti; tutti i testi passano da `src/i18n/it.ts`. Tailwind 4, mobile-first, tema chiaro/scuro automatico, focus visibile, target touch di almeno 44 px.
+- **PWA.** Il manifest è un file statico, `public/manifest.webmanifest`, così è servito anche in sviluppo e verificato dagli e2e; dichiara le icone e lo `share_target` (GET su `/new` con i parametri `url`, `text`, `title`). Il service worker lo genera `vite-plugin-pwa` (Workbox, configurato in `vite.config.ts`) solo nella build di produzione: `npm run dev` e gli e2e non lo vedono mai. Precarica l'app shell (HTML, JS, CSS, icone, esempi) con fallback di navigazione su `index.html` e `/api/*` escluso; nessuna cache runtime per l'anteprima e per le immagini dei prodotti. L'aggiornamento è in modalità `prompt`: `src/ui/components/UpdateBanner.tsx` registra il worker, ricontrolla quando l'app torna in primo piano e propone di ricaricare, mai in automatico, perché le risposte del questionario vivono in memoria. Il link condiviso arriva a `/new` e `src/lib/share-target.ts` decide che fare: se tra `url`, `text` e `title` c'è un link, la pagina lo sostituisce con il canonico `/new?url=…` (replace, così il tasto indietro non torna sull'URL di condivisione); altrimenti inserimento manuale con il testo come titolo. Le icone in `public/icons/` si rigenerano con `npm run icons` quando cambia `public/favicon.svg`: la 192 e la 512 `any` sono il favicon com'è, la 512 `maskable` e la 180 per iOS hanno lo sfondo a tutto campo e il disegno nella zona sicura centrale.
 
 ## Convenzioni
 
@@ -36,7 +38,7 @@ Il repository non è collegato a Netlify di proposito, per non consumare minuti 
 ## Roadmap
 
 1. **Criterio budget**: fatto. Budget mensile nelle impostazioni, prezzo confrontato con il budget a fasce, tre domande sul peso della spesa, barra tra i parametri del risultato. I dettagli sono nel README.
-2. **PWA** con `share_target` per ricevere i link dal menu Condividi di Android.
+2. **PWA**: fatto. App installabile, offline per l'app shell, `share_target` per ricevere i link dal menu Condividi di Android, avviso di nuova versione. I dettagli sono nella sezione Architettura.
 3. **Anteprima generica** (Open Graph) per i link di altri negozi.
 4. **Import di wishlist pubbliche**, best effort.
 5. **Interfaccia in inglese**: le stringhe sono già centralizzate.

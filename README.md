@@ -13,6 +13,8 @@ Ho costruito DoINeedIt come progetto dimostrativo: volevo un caso reale, piccolo
 3. **Rispondo alle domande.** Sono poche se il quadro è chiaro, di più se resta incerto.
 4. **Leggo il verdetto:** percentuale di necessità, giudizio in tre fasce, cinque parametri, le risposte che hanno pesato di più e qualche consiglio pratico.
 
+L'app si può **installare** come una app vera (dal menu del browser, "Installa app" o "Aggiungi a schermata Home"): si apre a schermo intero, funziona anche offline e su Android compare nel menu **Condividi**. Così dall'app Amazon basta toccare Condividi e scegliere DoINeedIt: il link arriva direttamente alla pagina di valutazione. Quando pubblico una versione nuova, l'app installata lo segnala con un avviso e si aggiorna solo quando lo chiedo, mai a metà di un questionario.
+
 Nelle impostazioni posso indicare il mio **budget mensile** per gli acquisti non indispensabili: da quel momento il prezzo di ogni prodotto viene confrontato con quella cifra e pesa nel punteggio.
 
 ### Il motore decisionale
@@ -45,6 +47,7 @@ Tutto resta nel browser: niente account, niente database, niente strumenti di an
 ## Stack
 
 - **React 19 + TypeScript** (strict), **Vite**, **Tailwind CSS 4**, **React Router**, **zustand** per lo stato persistente, **zod** per validare import e link condivisi.
+- **PWA**: manifest con `share_target`, service worker generato da `vite-plugin-pwa` (Workbox) che precarica l'app shell e la serve offline; nessuna cache per la funzione di anteprima e per le immagini dei prodotti.
 - **Netlify Edge Functions** per la lettura della pagina prodotto (`netlify/edge-functions/preview.ts`), con parser dedicato senza DOM e protezione contro i redirect fuori da Amazon. Ho scelto l'edge dopo aver misurato che alle funzioni serverless classiche, che girano su indirizzi AWS, Amazon risponde con una pagina di verifica, mentre alla rete edge serve la pagina vera.
 - **Vitest** + Testing Library per motore, parser e storage; **Playwright** per i flussi end-to-end su mobile e desktop.
 - **ESLint**, **Prettier**, **GitHub Actions** per lint, tipi, test e build a ogni push; deploy automatico su Netlify.
@@ -59,6 +62,8 @@ src/storage/     stato persistente, impostazioni, schema, export/import
 src/api/         client della funzione di anteprima
 src/ui/          pagine e componenti
 src/i18n/it.ts   tutti i testi dell'interfaccia
+public/          manifest della PWA, icone, favicon, immagini di esempio
+scripts/         generazione delle icone dal favicon
 netlify/         funzione edge e parser della pagina Amazon
 tests/e2e/       test Playwright
 ```
@@ -70,7 +75,7 @@ npm install
 npm run dev          # http://localhost:5173, con la funzione servita su /api/preview
 npm test             # test unitari
 npm run test:e2e     # test end-to-end (serve Chromium: npx playwright install chromium)
-npm run check        # lint + tipi + test + build, quello che gira in CI
+npm run check        # lint + formato + tipi + test + build, quello che gira in CI
 ```
 
 Comandi, architettura e convenzioni sono in [CONTRIBUTING.md](CONTRIBUTING.md).
@@ -80,11 +85,12 @@ Comandi, architettura e convenzioni sono in [CONTRIBUTING.md](CONTRIBUTING.md).
 - Amazon non offre un'API pubblica gratuita e a volte risponde alle richieste automatiche con una pagina di verifica. In quel caso l'app lo dice e passa all'inserimento manuale. Non memorizzo nulla di ciò che leggo.
 - Le liste dei desideri e i link di altri negozi per ora vanno inseriti a mano.
 - I dati sono legati al browser: cambiando dispositivo bisogna esportare e importare il file.
+- Su iPhone e iPad l'app si installa e funziona offline, ma il menu Condividi non è disponibile per le app web: il link va incollato a mano.
 
 ## Roadmap
 
 - [x] Criterio **budget**: peso della spesa sul mio budget mensile come quinto parametro.
-- [ ] App installabile (PWA) e ricezione dei link dal menu Condividi di Android.
+- [x] App installabile (PWA) e ricezione dei link dal menu Condividi di Android.
 - [ ] Anteprima generica per altri negozi tramite meta tag Open Graph.
 - [ ] Import di una lista dei desideri pubblica.
 - [ ] Interfaccia in inglese.

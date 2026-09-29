@@ -14,6 +14,11 @@ export const it = {
     footer: 'I tuoi dati restano nel tuo browser. Nessun account, nessun tracciamento.',
     privacyLink: 'Privacy',
   },
+  update: {
+    available: 'È disponibile una nuova versione di DoINeedIt.',
+    reload: 'Aggiorna',
+    later: 'Più tardi',
+  },
   answers: { yes: 'Sì', no: 'No', maybe: 'Forse' },
   verdict: {
     buy: { label: 'Ti serve davvero', short: 'Serve' },

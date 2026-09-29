@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Link, NavLink } from 'react-router-dom';
 import { it } from '@/i18n/it';
+import { UpdateBanner } from './UpdateBanner';
 
 const navClass = ({ isActive }: { isActive: boolean }) =>
   `whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
@@ -38,6 +39,7 @@ export function Layout({ children }: { children: ReactNode }) {
           {it.app.privacyLink}
         </Link>
       </footer>
+      <UpdateBanner />
     </div>
   );
 }

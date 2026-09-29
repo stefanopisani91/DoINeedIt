@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { CategoryId } from '@/engine';
 import { CATEGORIES } from '@/data/categories';
@@ -6,6 +6,7 @@ import { it } from '@/i18n/it';
 import { fetchPreview, type PreviewOutcome } from '@/api/preview';
 import { parseLink } from '@/lib/amazon-url';
 import { parsePriceInput } from '@/lib/format';
+import { resolveShareTarget } from '@/lib/share-target';
 import { useDraftStore } from '@/storage/draft';
 import type { Draft } from '@/storage/types';
 import { Button, ButtonLink } from '../components/Button';
@@ -23,12 +24,25 @@ interface FormState {
 
 export function NewItemPage() {
   const [params] = useSearchParams();
-  const url = params.get('url') ?? '';
+  const navigate = useNavigate();
+  const intent = useMemo(() => resolveShareTarget(params), [params]);
+
+  // A link received from the share sheet goes to the canonical /new?url=…,
+  // replacing the share URL so that "back" does not land on it again.
+  useEffect(() => {
+    if (intent.kind === 'redirect') {
+      navigate(`/new?url=${encodeURIComponent(intent.url)}`, { replace: true });
+    }
+  }, [intent, navigate]);
+
+  if (intent.kind === 'redirect') return null;
+  const url = intent.kind === 'url' ? intent.url : '';
+  const initialTitle = intent.kind === 'manual' ? intent.title : '';
   // Remount on a different link so every piece of state starts fresh.
-  return <NewItemForm key={url} url={url} />;
+  return <NewItemForm key={url || initialTitle} url={url} initialTitle={initialTitle} />;
 }
 
-function NewItemForm({ url }: { url: string }) {
+function NewItemForm({ url, initialTitle }: { url: string; initialTitle: string }) {
   const navigate = useNavigate();
   const link = parseLink(url);
   const canPreview =
@@ -37,7 +51,7 @@ function NewItemForm({ url }: { url: string }) {
 
   const [status, setStatus] = useState<Status>(canPreview ? { kind: 'loading' } : { kind: 'idle' });
   const [form, setForm] = useState<FormState>({
-    title: '',
+    title: initialTitle,
     price: '',
     imageUrl: '',
     category: 'other',

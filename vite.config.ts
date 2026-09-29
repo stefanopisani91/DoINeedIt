@@ -1,6 +1,7 @@
 import { defineConfig, type Plugin, type ViteDevServer } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
+import { VitePWA } from 'vite-plugin-pwa';
 import { fileURLToPath } from 'node:url';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
@@ -54,8 +55,29 @@ function readBody(req: NodeJS.ReadableStream): Promise<string> {
   });
 }
 
+/**
+ * Installable app: precaches the app shell at build time and serves it offline.
+ * The manifest is a static file (public/manifest.webmanifest) so it is served in
+ * development too. The worker exists only in production builds: `npm run dev`
+ * and the end-to-end suite never see a cached version.
+ */
+function pwa(): Plugin[] {
+  return VitePWA({
+    registerType: 'prompt',
+    injectRegister: false,
+    manifest: false,
+    devOptions: { enabled: false },
+    workbox: {
+      globPatterns: ['**/*.{js,css,html,svg,png,webmanifest}'],
+      navigateFallback: '/index.html',
+      navigateFallbackDenylist: [/^\/api\//],
+      cleanupOutdatedCaches: true,
+    },
+  });
+}
+
 export default defineConfig({
-  plugins: [react(), tailwindcss(), localFunctions()],
+  plugins: [react(), tailwindcss(), localFunctions(), pwa()],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
