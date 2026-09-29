@@ -49,15 +49,15 @@ Tutto resta nel browser: niente account, niente database, niente strumenti di an
 - **React 19 + TypeScript** (strict), **Vite**, **Tailwind CSS 4**, **React Router**, **zustand** per lo stato persistente, **zod** per validare import e link condivisi.
 - **PWA**: manifest con `share_target`, service worker generato da `vite-plugin-pwa` (Workbox) che precarica l'app shell e la serve offline; nessuna cache per la funzione di anteprima e per le immagini dei prodotti.
 - **Netlify Edge Functions** per la lettura della pagina prodotto (`netlify/edge-functions/preview.ts`), con parser dedicato senza DOM e protezione contro i redirect fuori da Amazon. Ho scelto l'edge dopo aver misurato che alle funzioni serverless classiche, che girano su indirizzi AWS, Amazon risponde con una pagina di verifica, mentre alla rete edge serve la pagina vera.
-- **Vitest** + Testing Library per motore, parser e storage; **Playwright** per i flussi end-to-end su mobile e desktop.
-- **ESLint**, **Prettier**, **GitHub Actions** per lint, tipi, test e build a ogni push; deploy automatico su Netlify.
+- **Vitest** per motore, parser, storage e ricezione dei link condivisi, con Testing Library per il banner di aggiornamento; **Playwright** per i flussi end-to-end su mobile e desktop.
+- **ESLint**, **Prettier**, **GitHub Actions** per lint, tipi, test unitari, build ed end-to-end a ogni push; pubblicazione manuale su Netlify.
 
 ## Struttura
 
 ```
 src/engine/      motore decisionale puro (tipi, punteggio, flusso adattivo)
 src/data/        domande, categorie, esempi
-src/lib/         riconoscimento link Amazon, link condivisibili, formattazione
+src/lib/         riconoscimento link Amazon, link ricevuti dal menu Condividi, link condivisibili, formattazione
 src/storage/     stato persistente, impostazioni, schema, export/import
 src/api/         client della funzione di anteprima
 src/ui/          pagine e componenti
@@ -83,14 +83,19 @@ Comandi, architettura e convenzioni sono in [CONTRIBUTING.md](CONTRIBUTING.md).
 ## Limiti noti
 
 - Amazon non offre un'API pubblica gratuita e a volte risponde alle richieste automatiche con una pagina di verifica. In quel caso l'app lo dice e passa all'inserimento manuale. Non memorizzo nulla di ciò che leggo.
-- Le liste dei desideri e i link di altri negozi per ora vanno inseriti a mano.
+- La lettura automatica funziona solo con le pagine dei singoli prodotti Amazon: liste dei desideri e link di altri negozi vanno inseriti a mano.
+- Se un testo condiviso contiene più link, conta il primo.
 - I dati sono legati al browser: cambiando dispositivo bisogna esportare e importare il file.
-- Su iPhone e iPad l'app si installa e funziona offline, ma il menu Condividi non è disponibile per le app web: il link va incollato a mano.
+- DoINeedIt compare nel menu Condividi solo su Android e solo dopo averla installata. Su iPhone e iPad l'app si installa e funziona offline, ma il menu Condividi non è disponibile per le app web: il link va incollato a mano.
+- L'avviso di nuova versione arriva quando l'app viene aperta o torna in primo piano, non mentre è già aperta sullo schermo.
+- L'interfaccia è solo in italiano.
 
 ## Roadmap
 
+La versione 1.1.0 chiude il progetto. I punti ancora aperti restano come possibili sviluppi futuri.
+
 - [x] Criterio **budget**: peso della spesa sul mio budget mensile come quinto parametro.
-- [x] App installabile (PWA) e ricezione dei link dal menu Condividi di Android.
+- [x] App installabile (PWA), ricezione dei link dal menu Condividi di Android e avviso di nuova versione.
 - [ ] Anteprima generica per altri negozi tramite meta tag Open Graph.
 - [ ] Import di una lista dei desideri pubblica.
 - [ ] Interfaccia in inglese.
